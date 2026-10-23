@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js"
+  }
+}
