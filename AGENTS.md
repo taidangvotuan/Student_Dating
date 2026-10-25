@@ -1,104 +1,109 @@
-# AGENTS.md — Constitution & Operational Rules for Autonomous Agents
+# AGENTS.md — Universal Agent Operating Rules & Multi-Stack Governance
 
-> **Single Source of Truth for Autonomous AI Agents & Subagents working on Student Dating**
-> Every autonomous agent operating in this repository MUST strictly abide by the rules, constraints, and engineering workflows defined below.
+> **Single Source of Truth for Autonomous AI Agents, Subagents, and Multi-Stack Engineering.**  
+> Every AI agent operating in this repository MUST strictly abide by the rules, behavioral constraints, engineering workflows, and quality standards defined below.
 
 ---
 
-## 1. Core Operating Principles (Nguyên tắc cốt lõi)
+## 1. Core Operating Principles (Nguyên tắc cốt lõi của Agent)
 
-1. **Evidence Over Assertion**: Never declare a task complete, a bug fixed, or a feature working without running concrete verification commands (`npm run build`, tests, or runtime scripts) and inspecting the actual execution output.
-2. **Zero-Assumption Policy**: Never guess existing types, function contracts, API responses, or database schemas. Always read the source files, inspect dependencies, or ask for clarification before writing implementation code.
-3. **Surgical Precision**: Make targeted, minimal diffs. Do not touch or reformat unrelated code, comments, or imports. Preserve existing architecture and docstrings.
+1. **Evidence Over Assertion**:
+   - Never declare a task complete, a bug fixed, or a build passing without running concrete verification commands (`test`, `build`, `lint`) and inspecting real execution output.
+   - Do not claim "Everything is working" based on code inspection alone.
+2. **Zero-Assumption & Read-First Policy**:
+   - Never guess existing types, signatures, schemas, or file structures.
+   - Always read source files or test suites before modifying them.
+   - Clarify ambiguous requirements early rather than making speculative assumptions.
+3. **Surgical Diffs & Preservation**:
+   - Edit only what is necessary to accomplish the task.
+   - Do not touch, reformat, or reorder unrelated files, code blocks, comments, or docstrings.
+   - Preserve existing architecture patterns and naming conventions.
 4. **Token Hygiene & High-Signal Communication**:
-   - Use bounded reads (`StartLine`/`EndLine`) instead of reading whole massive files.
-   - Omit fluff, pleasantries, repetitive summaries, and verbatim code echoing.
-   - Provide direct, actionable outputs.
+   - Use targeted range reads (`StartLine`/`EndLine`) instead of dumping full files into context.
+   - Bounded terminal output: Pipe verbose commands to `head`, `tail`, or `grep`.
+   - Deliver high-signal answers: omit filler pleasantries, apologies, and verbatim code mirroring in prose.
 
 ---
 
 ## 2. Engineering & Code Standards
 
-### 2.1 TypeScript & Node.js Rules
-- **Strict Typing**: Strict mode enabled (`tsconfig.json`). Never use `any` without an explicit, documented reason. Prefer `unknown`, generics, or discriminated unions.
-- **Runtime Validation**: External data (API requests, user inputs, database payloads) MUST be validated at system boundaries (e.g., using `zod`).
-- **Immutability by Default**: Use `const`, `readonly` properties, and pure functions where feasible. Avoid mutating function parameters.
-- **Explicit Returns**: Exported functions and public API methods must have explicit return type annotations.
-- **Async/Await & Error Handling**:
-  - Always `await` Promises or explicitly return them.
-  - Never swallow errors with empty `catch {}` blocks.
-  - Throw typed domain errors or wrap lower-level exceptions with relevant contextual data.
+### 2.1 Typing & Safety
+- **Strict Typing**: No untyped or loose types (`any` in TypeScript, bare `Object` in Java, untyped `dict` in Python) unless strictly required and documented.
+- **Runtime Validation**: Validate all inputs at external boundaries (HTTP requests, file inputs, environment variables) using runtime validators (Zod, Pydantic, Bean Validation).
+- **Immutability by Default**: Prefer immutable data structures, `readonly`/`final` properties, and pure functions. Avoid in-place mutation of parameters.
 
-### 2.2 Project Structure & Architecture
-Maintain clean separation of concerns:
-```
-src/
-├── config/         # Environment variables & runtime configurations
-├── core/           # Domain entities, value objects, business rules (framework-agnostic)
-├── modules/        # Feature slices (e.g., auth, profile, matching, chat)
-│   ├── dto/        # Data transfer objects & input validation schemas
-│   ├── services/   # Business logic & application use-cases
-│   └── controllers/# API route handlers / event listeners
-├── infrastructure/ # Database connectors, external APIs, storage, cache
-└── shared/         # Common utilities, error classes, constants, types
-```
+### 2.2 Error Handling & Resilience
+- Never swallow errors with empty `catch` blocks or bare `except: pass`.
+- Throw typed, meaningful domain errors containing contextual metadata.
+- Log errors with structured contextual information, never raw unstructured string dumps.
+
+### 2.3 Architecture & Modularity
+- Adhere to **Clean Architecture / Separation of Concerns**:
+  - `Domain`: Pure entities and business rules (framework-agnostic).
+  - `Application / Services`: Use cases and orchestration logic.
+  - `Infrastructure`: Database adapters, external APIs, filesystem, messaging.
+  - `Presentation / API`: Controllers, routes, UI components, CLI commands.
+- Deep Modules: Small, clean interfaces hiding robust internal implementation details.
 
 ---
 
-## 3. Subagent Orchestration & Lifecycle Workflow
+## 3. Subagent Orchestration Lifecycle
 
-All non-trivial tasks must follow the designated subagent pipeline:
+Every non-trivial feature or refactor follows the deterministic 6-stage lifecycle:
 
 ```mermaid
 flowchart TD
-    Task["Incoming Task / User Request"] --> Plan["1. Analysis & Architecture<br/>(frontend_architect / system_coordinator)"]
-    Plan --> Test["2. TDD & Spec Authoring<br/>(Write failing tests / type contracts)"]
-    Test --> Impl["3. Implementation<br/>(frontend_developer / python_backend / java_pro)"]
-    Impl --> Sec["4. Security & Sanitization<br/>(security_auditor / external-content-sanitizer)"]
-    Sec --> QA["5. QA & Verification<br/>(qa_reviewer: build, lint, test)"]
-    QA --> Ready["6. Git Commit & Summary"]
+    Req["1. Requirement / User Goal"] --> Arch["2. System Planning & Architecture<br/>(system_coordinator / frontend_architect)"]
+    Arch --> TDD["3. Test-First Specification<br/>(Write unit/contract tests)"]
+    TDD --> Dev["4. Surgical Implementation<br/>(frontend_developer / python_backend / java_pro)"]
+    Dev --> Sec["5. Security & Threat Audit<br/>(security_auditor / redteam_security)"]
+    Sec --> QA["6. Verification & Code Review<br/>(qa_reviewer: build, lint, test, a11y)"]
+    QA --> Done["Ready for Git Commit"]
 ```
 
-### Subagent Roles & Responsibilities:
-- **`system_coordinator`**: Break down complex requirements, manage execution plan, coordinate specialists.
-- **`frontend_architect` / `frontend_developer`**: Maintain clean component hierarchy, UI state management, and responsive layouts.
-- **`ui_ux_designer` / `taste_craftsman`**: Enforce anti-slop visual design, WCAG AA accessibility, proper typography, and consistent color tokens.
-- **`security_auditor`**: Enforce threat modeling, input sanitization, authentication security, and student data privacy.
-- **`qa_reviewer`**: Run test suites, verify builds, perform two-axis code reviews, and audit accessibility.
+### Subagent Roster (`agents.toml`):
+- **Architecture & Coordination**: `system_coordinator`, `frontend_architect`, `database_architect`, `cloud_architect`.
+- **Implementation**: `frontend_developer`, `python_backend`, `java_pro`, `mobile_dev`, `systems_engineer`.
+- **UI / Art Direction**: `ui_ux_designer` (WCAG AA, token system), `taste_craftsman` (anti-slop aesthetic, typography).
+- **Quality & Performance**: `qa_reviewer` (two-axis review), `web_performance_auditor`, `load_tester`, `sre_specialist`.
+- **Security**: `security_auditor` (STRIDE threat modeling, content sanitization), `redteam_security`.
 
 ---
 
-## 4. Security, Privacy & Compliance (Dating Domain Specifics)
+## 4. Security, Secrets & Privacy Protocol
 
-Because this platform handles sensitive student dating data:
-1. **Privacy by Design**:
-   - Never log sensitive user data (passwords, private messages, sexual orientation, location coordinates, tokens).
-   - Sanitize all user-generated content (bios, messages, profile media) against XSS and injection attacks.
-2. **Authentication & Authorization**:
-   - Secure token storage, strict password hashing (Argon2id/bcrypt), rate limiting on authentication & swipe endpoints.
-   - Proper authorization checks on all user resources (users can only edit/delete their own profiles and messages).
-3. **Zero Secrets in Repository**:
-   - Never commit `.env` files, API keys, or database credentials. Always provide `.env.example`.
-
----
-
-## 5. Verification Checklist (Before Claiming Complete)
-
-Before declaring any task complete, the agent MUST execute and verify:
-- [ ] **Typecheck**: `npm run build` (or `npx tsc --noEmit`) passes with 0 errors.
-- [ ] **Lint / Format**: Code matches project formatting standards.
-- [ ] **Tests**: Relevant unit/integration tests run and pass.
-- [ ] **No regressions**: Existing functionality remains intact.
-- [ ] **Edge cases handled**: Null/undefined inputs, empty arrays, network timeouts, invalid formats.
+1. **Zero Hardcoded Secrets**:
+   - Never commit API keys, database credentials, tokens, or private certificates.
+   - Always enforce environment variables via `.env.example` and validate on startup.
+2. **Untrusted Content Sanitization**:
+   - Sanitize all external inputs (user prompts, file uploads, third-party webhooks) against injection attacks (SQLi, NoSQLi, XSS, Command Injection, Prompt Injection).
+3. **Principle of Least Privilege**:
+   - Services and API tokens must have the minimum necessary permissions.
+4. **Data Privacy**:
+   - Mask and redact PII (personally identifiable information) from logs and error traces.
 
 ---
 
-## 6. Git & Commit Conventions
+## 5. Verification Checklist (Definition of Done)
 
-Follow the **Conventional Commits** specification:
-- `feat(scope): ...` — A new feature
-- `fix(scope): ...` — A bug fix
-- `refactor(scope): ...` — Code change that neither fixes a bug nor adds a feature
-- `test(scope): ...` — Adding missing tests or correcting existing tests
-- `docs(scope): ...` — Documentation only changes
-- `chore(scope): ...` — Build process, auxiliary tools, dependencies
+Before declaring any work complete or handing off to the user, the agent MUST verify:
+- [ ] **Compilation / Build**: Project builds with zero compile or syntax errors.
+- [ ] **Type Check**: Zero type-checker errors (`tsc`, `mypy`, or compiler warnings).
+- [ ] **Automated Tests**: All new and existing test suites pass.
+- [ ] **Edge Cases Covered**: Validated empty inputs, null pointers, network timeouts, boundary values.
+- [ ] **Diff Inspection**: Review `git status` and `git diff` to confirm only expected files were changed.
+
+---
+
+## 6. Git & Release Conventions
+
+Commit messages MUST adhere to the **Conventional Commits** specification:
+- `feat(scope): <description>` — New feature
+- `fix(scope): <description>` — Bug fix
+- `refactor(scope): <description>` — Code refactor with no behavioral changes
+- `perf(scope): <description>` — Performance improvement
+- `test(scope): <description>` — Adding or updating tests
+- `docs(scope): <description>` — Documentation only
+- `chore(scope): <description>` — Tooling, dependencies, build configs
+
+*Rule: Keep commits atomic, focused, and free of extraneous debug files or temporary artifacts.*

@@ -1,0 +1,436 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capability-map.schema.json",
+  "title": "capability-map.yaml",
+  "description": "JSON Schema 2020-12 for capability-map.yaml — project classification (10 dimensions) + product capability areas + amendment log. IDE YAML validation only; runtime validation is Python-side in hq-api.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capability_map", "product_capabilities"],
+  "$defs": {
+    "CapabilityId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Kebab-case capability or entity identifier"
+    },
+    "DotRef": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "description": "Cross-capability entity reference in {capability-id}.{entity-name} dot-notation"
+    },
+    "DotEvent": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]+(\\.[a-z][a-z0-9-]+)?$",
+      "description": "Domain event reference in {capability-id}.{event-name} dot-notation"
+    },
+    "CapabilityRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "scope", "owns", "has_ui", "has_api", "has_persistence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/CapabilityId" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable capability area name (soft target ~80 chars)"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Concise (1-3 sentences, soft target ~1000 chars): what this capability does AND does NOT do (the negative clause is required)"
+        },
+        "subdomain": {
+          "type": "string",
+          "enum": ["core", "supporting", "generic"],
+          "default": "core",
+          "description": "core = primary differentiator; supporting = enabling; generic = commodity"
+        },
+        "parent": {
+          "oneOf": [{ "$ref": "#/$defs/CapabilityId" }, { "type": "null" }],
+          "description": "L1 parent id when this is an L2 sub-capability; null for top-level"
+        },
+        "level": {
+          "type": "integer",
+          "enum": [1, 2],
+          "description": "Python-injected: 1 if parent is null, 2 otherwise. Model must omit."
+        },
+        "owns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityId" },
+          "minItems": 0,
+          "description": "Entity names this capability custodies (authoritative source). May be empty for ownerless capabilities (pure-UI / gateway / analytics / orchestration)."
+        },
+        "refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotRef" },
+          "default": [],
+          "description": "Cross-capability entity references this capability reads but does NOT own"
+        },
+        "publishes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotEvent" },
+          "default": [],
+          "description": "Domain events this capability emits"
+        },
+        "consumes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotEvent" },
+          "default": [],
+          "description": "Domain events this capability reacts to"
+        },
+        "entry_points": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "How users or systems arrive at this capability (soft target ~200 chars/item; seeds wireframes navigation contract)"
+        },
+        "exit_points": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "Where users go after completing a flow here (soft target ~200 chars/item; seeds cross-capability transitions)"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityId" },
+          "default": [],
+          "description": "Capability IDs whose documents must be produced before this capability's documents"
+        },
+        "has_ui": {
+          "type": "boolean",
+          "description": "True if this capability has any user interface. Triggers wireframes-{id} fan-out."
+        },
+        "has_api": {
+          "type": "boolean",
+          "description": "True if this capability exposes or consumes an API. Triggers api-spec-{id} fan-out."
+        },
+        "has_persistence": {
+          "type": "boolean",
+          "description": "True if this capability owns data that must be durably persisted. Triggers data-model-{id} fan-out."
+        },
+        "has_model": {
+          "type": "boolean",
+          "default": false,
+          "description": "True if this capability trains or serves an ML model. Triggers model-card-{id} fan-out (per-capability) and selects the system eval-plan."
+        },
+        "ui_complexity": {
+          "type": "string",
+          "enum": ["simple", "moderate", "complex", "consumer-grade"],
+          "description": "Required when has_ui is true. simple/moderate = wireframes only; complex/consumer-grade = wireframes + hi-fi."
+        },
+        "impl_complexity": {
+          "type": "string",
+          "enum": ["simple", "moderate", "complex"],
+          "description": "Backend/algorithmic implementation complexity (not UI richness — that is ui_complexity). moderate/complex trigger technical-design-{id} fan-out; simple does not."
+        },
+        "notes": {
+          "type": "string",
+          "default": "",
+          "description": "Free-text (soft target ~2000 chars): open questions, known ambiguities, scope rationale"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "superseded", "merged"],
+          "description": "Python-injected on T4/T5 delta. Model must omit."
+        },
+        "superseded_by": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityId" },
+          "description": "Python-injected on T4 (split): the two new capability IDs. Model must omit."
+        },
+        "merged_into": {
+          "oneOf": [{ "$ref": "#/$defs/CapabilityId" }, { "type": "null" }],
+          "description": "Python-injected on T5 (merge): the new merged capability ID. Model must omit."
+        }
+      }
+    },
+    "AmendmentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "change_type", "affected_ids", "description"],
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp of when the amendment was applied"
+        },
+        "change_type": {
+          "type": "string",
+          "enum": ["T1", "T2", "T3", "T4", "T5"],
+          "description": "T1=FIELD_ADD, T2=FIELD_UPDATE, T3=RECORD_ADD, T4=CAPABILITY_SPLIT, T5=CAPABILITY_MERGE"
+        },
+        "affected_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityId" },
+          "minItems": 1,
+          "description": "Capability IDs affected by this amendment"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable summary of what changed and why (soft target ~500 chars)"
+        },
+        "request": {
+          "type": "string",
+          "description": "The original change request text from the user (soft target ~10000 chars)"
+        },
+        "document_delta": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action", "document_id"],
+            "properties": {
+              "action": { "type": "string", "enum": ["add", "amend", "supersede"] },
+              "document_id": { "type": "string" }
+            }
+          },
+          "description": "Document entries added, amended, or superseded by this amendment"
+        }
+      }
+    },
+    "Meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schema_version": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "project_id": { "type": "string" },
+        "skill_version": { "type": "string" },
+        "amendments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AmendmentEntry" },
+          "description": "Append-only amendment log. Each entry is immutable once written."
+        }
+      }
+    },
+    "ArchetypeClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary"],
+      "properties": {
+        "primary": { "type": "string", "enum": ["web-app", "api-service", "cli-tool", "data-pipeline", "mobile-app", "library-sdk", "desktop-app", "embedded-iot", "ml-service", "browser-extension", "game", "infra-platform", "agent-automation"], "description": "Pragmatic synthesis (no canonical standard). Release-runbook gate excludes {cli-tool, library-sdk}." },
+        "secondary": { "type": "array", "items": { "type": "string" } },
+        "lifecycle_stage": { "type": "string", "enum": ["incubate", "invest", "sustain", "sunset"] }
+      }
+    },
+    "DomainClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audience"],
+      "properties": {
+        "primary": { "type": "string", "description": "Business domain — free text (e-commerce, fintech, healthcare, …)" },
+        "secondary": { "type": "array", "items": { "type": "string" } },
+        "audience": { "type": "string", "enum": ["b2c", "b2b", "b2b2c", "developer", "internal"], "description": "[trigger] user_research" },
+        "consumer_facing": { "type": "boolean" },
+        "open_to_public": { "type": "boolean" }
+      }
+    },
+    "ScaleClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "real_time", "availability_target", "geo_distribution", "data_volume"],
+      "properties": {
+        "concurrency": { "type": "string", "enum": ["low", "medium", "high", "extreme"] },
+        "throughput": { "type": "string", "enum": ["low", "medium", "high", "extreme"] },
+        "real_time": { "type": "string", "enum": ["none", "soft", "near", "hard"] },
+        "data_volume": { "type": "string", "enum": ["small", "medium", "large", "extreme"] },
+        "availability_target": { "type": "string", "enum": ["99.0", "99.9", "99.95", "99.99", "99.999"] },
+        "consistency": { "type": "string", "enum": ["eventual", "strong", "linearizable"] },
+        "geo_distribution": { "type": "string", "enum": ["single-region", "multi-region", "global", "edge"] },
+        "burst_traffic": { "type": "boolean" },
+        "latency_sensitive": { "type": "boolean" },
+        "stateful": { "type": "boolean" }
+      }
+    },
+    "UIClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["has_ui", "complexity"],
+      "properties": {
+        "has_ui": { "type": "boolean", "description": "[trigger] visual" },
+        "complexity": { "type": "string", "enum": ["none", "minimal", "simple", "complex", "consumer-grade"], "description": "[trigger] user_research" },
+        "target_users": { "type": "string", "enum": ["developer", "internal", "business-user", "consumer", "mixed"] },
+        "mobile": { "type": "object", "additionalProperties": true },
+        "accessibility": { "type": "object", "additionalProperties": true, "properties": { "required_level": { "type": "string", "enum": ["A", "AA", "AAA"] } } },
+        "i18n": { "type": "object", "additionalProperties": true },
+        "multi_tenancy_ux": { "type": "object", "additionalProperties": true },
+        "design_system": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "SecurityClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asvs_level": { "type": "integer", "enum": [1, 2, 3], "description": "OWASP ASVS verification level" },
+        "data_sensitivity": { "type": "object", "additionalProperties": true, "properties": { "level": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] } } },
+        "auth_complexity": { "type": "string", "enum": ["none", "simple", "mfa", "sso-federated", "zero-trust"] },
+        "authz_complexity": { "type": "string", "enum": ["none", "rbac", "abac", "multi-tenant-isolation"] },
+        "external_attack_surface": { "type": "object", "additionalProperties": true },
+        "supply_chain_risk": { "type": "string", "enum": ["low", "medium", "high"] },
+        "pen_test_required": { "type": "boolean" }
+      }
+    },
+    "IntegrationsClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected", "complexity"],
+      "properties": {
+        "expected": { "type": "boolean", "description": "[trigger] integrations" },
+        "complexity": { "type": "string", "enum": ["none", "minimal", "moderate", "complex"], "description": "[trigger] integrations" },
+        "categories": { "type": "object", "additionalProperties": true },
+        "patterns": { "type": "object", "additionalProperties": true },
+        "third_party_list": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "DataMLClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ml_involvement"],
+      "properties": {
+        "has_data_pipeline": { "type": "boolean" },
+        "pipeline_type": { "type": "string", "enum": ["none", "batch", "streaming", "lambda", "kappa", "lakehouse"] },
+        "data_volume_class": { "type": "string", "enum": ["none", "transactional", "analytical", "big-data"] },
+        "ml_involvement": { "type": "string", "enum": ["none", "uses-pre-trained", "fine-tunes", "trains-from-scratch", "multi-model"], "description": "[trigger] ml" },
+        "model_serving": { "type": "boolean" },
+        "model_governance": { "type": "object", "additionalProperties": true },
+        "eu_ai_act": { "type": "object", "additionalProperties": true, "properties": { "applies": { "type": "boolean" }, "risk_level": { "type": "string", "enum": ["unacceptable", "high", "limited", "minimal"] } } },
+        "data_governance": { "type": "object", "additionalProperties": true },
+        "responsible_ai": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "RegulatoryClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applies"],
+      "properties": {
+        "applies": { "type": "boolean", "description": "[trigger] regulatory" },
+        "frameworks": { "type": "array", "items": { "type": "string" } },
+        "data_privacy": { "type": "object", "additionalProperties": true },
+        "financial": { "type": "object", "additionalProperties": true },
+        "health": { "type": "object", "additionalProperties": true },
+        "government": { "type": "object", "additionalProperties": true },
+        "safety_critical": { "type": "object", "additionalProperties": true },
+        "ai_governance": { "type": "object", "additionalProperties": true },
+        "export_control": { "type": "object", "additionalProperties": true },
+        "standards": { "type": "object", "additionalProperties": true },
+        "supply_chain": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "InfrastructureClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deployment_model": { "type": "string", "enum": ["local", "cloud", "multi-cloud", "hybrid", "on-premises-option", "edge"] },
+        "compute_paradigm": { "type": "string", "enum": ["serverless", "container", "vm", "bare-metal", "managed-service", "mixed"] },
+        "cloud_providers": { "type": "array", "items": { "type": "string" } },
+        "multi_region": { "type": "boolean" },
+        "edge_computing": { "type": "boolean" },
+        "data_residency": { "type": "object", "additionalProperties": true },
+        "on_premises_option": { "type": "boolean" },
+        "iac_required": { "type": "boolean" },
+        "managed_services": { "type": "array", "items": { "type": "string" } },
+        "observability": { "type": "object", "additionalProperties": true },
+        "dr": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "BusinessClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform"],
+      "properties": {
+        "model": { "type": "string", "enum": ["saas", "marketplace", "ecommerce", "open-source", "internal-tool", "platform", "api-product", "consumer-app", "enterprise-software"] },
+        "open_source": { "type": "object", "additionalProperties": true },
+        "distribution": { "type": "object", "additionalProperties": true },
+        "platform": { "type": "object", "additionalProperties": true, "required": ["type"], "properties": { "type": { "type": "string", "enum": ["none", "marketplace", "app-store", "dev-platform", "social-network", "payments-network", "data-platform", "media"], "description": "[trigger] platform_ecosystem (absent ⇒ none)" } } },
+        "commercialization": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "PriorArtTriggers": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The 10 prior-art gates — LLM-written (by the discoverer, applying the formulas to the classification), validator-guaranteed. Each is a boolean derived from the classification clusters.",
+      "required": ["code", "visual", "market_competitive", "user_research", "security", "ml", "regulatory", "scale", "integrations", "platform_ecosystem"],
+      "properties": {
+        "_derived": { "type": "boolean" },
+        "code": { "type": "boolean" },
+        "visual": { "type": "boolean" },
+        "market_competitive": { "type": "boolean" },
+        "user_research": { "type": "boolean" },
+        "security": { "type": "boolean" },
+        "ml": { "type": "boolean" },
+        "regulatory": { "type": "boolean" },
+        "scale": { "type": "boolean" },
+        "integrations": { "type": "boolean" },
+        "platform_ecosystem": { "type": "boolean" }
+      }
+    },
+    "CapabilityMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archetype", "domain", "regulatory", "scale", "security", "integrations", "ui", "data_ml", "infrastructure", "business", "prior_art_triggers"],
+      "properties": {
+        "archetype": { "$ref": "#/$defs/ArchetypeClassification" },
+        "domain": { "$ref": "#/$defs/DomainClassification" },
+        "regulatory": { "$ref": "#/$defs/RegulatoryClassification" },
+        "scale": { "$ref": "#/$defs/ScaleClassification" },
+        "security": { "$ref": "#/$defs/SecurityClassification" },
+        "integrations": { "$ref": "#/$defs/IntegrationsClassification" },
+        "ui": { "$ref": "#/$defs/UIClassification" },
+        "data_ml": { "$ref": "#/$defs/DataMLClassification" },
+        "infrastructure": { "$ref": "#/$defs/InfrastructureClassification" },
+        "business": { "$ref": "#/$defs/BusinessClassification" },
+        "prior_art_triggers": { "$ref": "#/$defs/PriorArtTriggers" }
+      }
+    }
+  },
+  "properties": {
+    "_meta": { "$ref": "#/$defs/Meta" },
+    "capability_map": {
+      "$ref": "#/$defs/CapabilityMap",
+      "description": "10-cluster project classification (v2) + the model-authored, validator-guaranteed prior_art_triggers block."
+    },
+    "product_capabilities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/CapabilityRecord" },
+      "minItems": 1,
+      "description": "Flat list of L1 (and optional L2) capability area records. Target: 4–10 L1 records.",
+      "examples": [
+        [
+          {
+            "id": "catalog",
+            "name": "Catalog",
+            "scope": "Manages product listings, variants, and pricing; does NOT handle inventory levels or order fulfillment.",
+            "subdomain": "core",
+            "owns": ["product", "variant", "price"],
+            "refs": [],
+            "publishes": ["catalog.product-updated"],
+            "consumes": [],
+            "entry_points": ["Homepage featured products", "Search results"],
+            "exit_points": ["Add to Cart → Cart capability"],
+            "depends_on": [],
+            "has_ui": true,
+            "has_api": true,
+            "has_persistence": true,
+            "ui_complexity": "consumer-grade"
+          },
+          {
+            "id": "cart",
+            "name": "Cart",
+            "scope": "Manages the user's shopping cart session and coupon application; does NOT process payments or create orders.",
+            "subdomain": "core",
+            "owns": ["cart", "line-item", "applied-coupon"],
+            "refs": ["catalog.product", "catalog.variant"],
+            "publishes": ["cart.item-added", "cart.checkout-initiated"],
+            "consumes": ["catalog.product-updated"],
+            "entry_points": ["Product detail page — Add to Cart", "Persistent cart icon in nav"],
+            "exit_points": ["Proceed to Checkout → Checkout capability", "Continue Shopping → Catalog"],
+            "depends_on": ["catalog"],
+            "has_ui": true,
+            "has_api": true,
+            "has_persistence": true,
+            "ui_complexity": "moderate"
+          }
+        ]
+      ]
+    }
+  }
+}
