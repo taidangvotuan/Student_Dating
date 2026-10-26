@@ -2,7 +2,8 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "test": "tsx --test test/**/*.test.ts"
   },
   "name": "student_dating",
   "version": "1.0.0",
@@ -13,7 +14,7 @@
     "url": "git+https://github.com/taidangvotuan/Student_Dating.git"
   },
   "keywords": [],
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/taidangvotuan/Student_Dating/issues"
   },
