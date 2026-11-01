@@ -4,7 +4,7 @@
 
 - **Engine:** PostgreSQL managed by Supabase. The supplied host identifies the intended project; no credentials are stored here.
 - **Authentication:** Supabase Auth (`auth.users`) owns email, password and email OTP. Do not add a second password or OTP table.
-- **Query layer:** SQL schema only; the repository currently has in-memory TypeScript domain classes and no database client.
+- **Query layer:** `src/database.ts` provides a server-side PostgreSQL pool and `npm run db:check` tests connectivity. Domain classes still use in-memory state; no application flow writes to this pool yet.
 - **Migration:** [`20261031000000_initial_student_dating.sql`](../../supabase/migrations/20261031000000_initial_student_dating.sql) is an initial migration for an empty Supabase project. Run it only after checking the target project and taking a backup if it contains data.
 - **Names:** plural `snake_case` tables/columns, UUID keys aligned with `auth.users.id`, `timestamptz` for instants.
 
@@ -128,4 +128,4 @@ This is an initial schema: no rollback script or data backfill is included becau
 
 ## 6. Integration work still required
 
-The existing TypeScript classes use memory maps, so this migration does not connect the application to Supabase. The backend still needs an Auth signup hook/service to create `students` and require a `.edu.vn` email, API authorization for privileged writes, Storage policy for identity images, and integration tests for RLS using two distinct user identities. `updated_at` fields must be set by application writes; there is no automatic trigger in this initial design.
+The existing TypeScript classes use memory maps, so the new connection configuration does not yet persist application data to Supabase. The backend still needs an Auth signup hook/service to create `students` and require a `.edu.vn` email, API authorization for privileged writes, Storage policy for identity images, and integration tests for RLS using two distinct user identities. `updated_at` fields must be set by application writes; there is no automatic trigger in this initial design.
