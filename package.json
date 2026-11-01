@@ -3,7 +3,8 @@
     "dev": "tsx src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "db:check": "node --env-file=.env --import tsx src/check-database.ts"
   },
   "name": "student_dating",
   "version": "1.0.0",
@@ -21,8 +22,12 @@
   "homepage": "https://github.com/taidangvotuan/Student_Dating#readme",
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   }
 }
