@@ -7,7 +7,7 @@ async function main(): Promise<void> {
     await pool.query('SELECT 1');
     console.log('Database connection OK.');
   } catch {
-    console.error('Database connection failed. Check DATABASE_URL, the CA certificate path, and network access.');
+    console.error('Database connection failed. Check DB_* values, the CA certificate, and network access.');
     process.exitCode = 1;
   } finally {
     await pool?.end();

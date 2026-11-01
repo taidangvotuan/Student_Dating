@@ -1,42 +1,61 @@
+import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { Pool } from 'pg';
+import type { PoolConfig } from 'pg';
 
-type DatabaseEnvironment = { readonly DATABASE_URL?: string };
+type DatabaseEnvironment = {
+  readonly DB_HOST?: string;
+  readonly DB_PORT?: string;
+  readonly DB_NAME?: string;
+  readonly DB_USER?: string;
+  readonly DB_PASSWORD?: string;
+  readonly DB_SSL_ROOT_CERT?: string;
+};
 
-export function getDatabaseUrl(env: DatabaseEnvironment): string {
-  const connectionString = env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required.');
+export function getDatabaseConfig(env: DatabaseEnvironment): PoolConfig {
+  const host = env.DB_HOST?.trim();
+  if (!host) {
+    throw new Error('DB_HOST is required.');
   }
-
-  let url: URL;
-  try {
-    url = new URL(connectionString);
-  } catch {
-    throw new Error('DATABASE_URL must be a valid PostgreSQL URL.');
+  const port = Number(env.DB_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error('DB_PORT must be an integer from 1 to 65535.');
   }
-
-  if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname || !url.pathname || url.pathname === '/') {
-    throw new Error('DATABASE_URL must include a PostgreSQL host and database.');
+  const database = env.DB_NAME?.trim();
+  if (!database) {
+    throw new Error('DB_NAME is required.');
   }
-  if (!url.username || !url.password || url.password === 'YOUR_PERCENT_ENCODED_PASSWORD') {
-    throw new Error('DATABASE_URL must include a username and password.');
+  const user = env.DB_USER?.trim();
+  if (!user) {
+    throw new Error('DB_USER is required.');
   }
-  if (url.searchParams.get('sslmode') !== 'verify-full') {
-    throw new Error('DATABASE_URL must use sslmode=verify-full.');
+  const password = env.DB_PASSWORD;
+  if (!password || password === 'YOUR_PASSWORD') {
+    throw new Error('DB_PASSWORD is required.');
   }
-  const certificatePath = url.searchParams.get('sslrootcert');
+  const certificatePath = env.DB_SSL_ROOT_CERT;
   if (!certificatePath || !isAbsolute(certificatePath)) {
-    throw new Error('DATABASE_URL must include an absolute sslrootcert path.');
+    throw new Error('DB_SSL_ROOT_CERT must be an absolute path.');
+  }
+  let ca: string;
+  try {
+    ca = readFileSync(certificatePath, 'utf8');
+  } catch {
+    throw new Error('DB_SSL_ROOT_CERT must point to a readable CA certificate.');
   }
 
-  return connectionString;
+  return {
+    host,
+    port,
+    database,
+    user,
+    password,
+    ssl: { ca, rejectUnauthorized: true },
+    max: 5,
+    connectionTimeoutMillis: 10_000,
+  };
 }
 
 export function createDatabasePool(env: DatabaseEnvironment = process.env): Pool {
-  return new Pool({
-    connectionString: getDatabaseUrl(env),
-    max: 5,
-    connectionTimeoutMillis: 10_000,
-  });
+  return new Pool(getDatabaseConfig(env));
 }
