@@ -1,0 +1,252 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DIRECT_DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum AccountStatus {
+  HOAT_DONG
+  TAM_KHOA
+  KHOA_VINH_VIEN
+}
+
+enum VerificationStatus {
+  CHUA_XAC_THUC
+  CHO_DUYET
+  DA_XAC_THUC
+  TU_CHOI
+}
+
+enum ProfileVisibility {
+  CON_HOAT_DONG
+  BI_AN
+  BI_KHOA
+  NGUNG_SU_DUNG
+}
+
+enum InteractionKind {
+  THICH
+  BO_QUA
+}
+
+enum MatchStatus {
+  DA_GHEP_DOI
+  DANG_HOAT_DONG
+  DA_HUY
+}
+
+enum ConversationStatus {
+  HOAT_DONG
+  KHONG_HOAT_DONG
+}
+
+enum MessageStatus {
+  DA_GUI
+  DA_XOA
+}
+
+/// Students table in public schema.
+/// Primary key `id` references `auth.users(id)` managed by Supabase Auth.
+model Student {
+  id            String        @id @db.Uuid
+  accountStatus AccountStatus @default(HOAT_DONG) @map("account_status")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  profile       Profile?
+  verification  Verification?
+
+  @@map("students")
+}
+
+/// Student verification status and documents in public schema.
+model Verification {
+  studentId        String             @id @map("student_id") @db.Uuid
+  studentNumber    String?            @map("student_number")
+  universityName   String?            @map("university_name")
+  cardStoragePath  String?            @map("card_storage_path")
+  status           VerificationStatus @default(CHUA_XAC_THUC)
+  reviewerId       String?            @map("reviewer_id") @db.Uuid
+  rejectionReason  String?            @map("rejection_reason")
+  submittedAt      DateTime?          @map("submitted_at") @db.Timestamptz
+  reviewedAt       DateTime?          @map("reviewed_at") @db.Timestamptz
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  student          Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([universityName, studentNumber])
+  @@index([reviewerId], map: "verifications_reviewer_id_idx")
+  @@map("verifications")
+}
+
+/// Public profile for matching and interactions.
+model Profile {
+  studentId             String             @id @map("student_id") @db.Uuid
+  fullName              String             @map("full_name")
+  birthDate             DateTime           @map("birth_date") @db.Date
+  gender                String?
+  bio                   String?
+  faculty               String?
+  cohort                String?
+  connectionGoal        String?            @map("connection_goal")
+  visibility            ProfileVisibility  @default(BI_AN)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  student               Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  location              ProfileLocation?
+  searchPreference      SearchPreference?
+  profileInterests      ProfileInterest[]
+  initiatedInteractions Interaction[]      @relation("ActorInteractions")
+  receivedInteractions  Interaction[]      @relation("TargetInteractions")
+  blockedByMe           Block[]            @relation("BlockerBlocks")
+  blockedMe             Block[]            @relation("BlockedBlocks")
+  matchesAsA           Match[]            @relation("StudentAMatches")
+  matchesAsB           Match[]            @relation("StudentBMatches")
+  messages              Message[]
+  conversationReads     ConversationRead[]
+
+  @@map("profiles")
+}
+
+/// Profile coordinates stored in public schema for distance calculations.
+model ProfileLocation {
+  studentId String   @id @map("student_id") @db.Uuid
+  latitude  Float
+  longitude Float
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  profile   Profile  @relation(fields: [studentId], references: [studentId], onDelete: Cascade)
+
+  @@map("profile_locations")
+}
+
+/// Global interest tags available for profiles.
+model Interest {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String            @unique
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  profileInterests ProfileInterest[]
+
+  @@map("interests")
+}
+
+/// Many-to-many relationship joining profiles and selected interests.
+model ProfileInterest {
+  studentId  String   @map("student_id") @db.Uuid
+  interestId String   @map("interest_id") @db.Uuid
+  isVisible  Boolean  @default(true) @map("is_visible")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  profile    Profile  @relation(fields: [studentId], references: [studentId], onDelete: Cascade)
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Restrict)
+
+  @@id([studentId, interestId])
+  @@index([interestId], map: "profile_interests_interest_id_idx")
+  @@map("profile_interests")
+}
+
+/// Matching filters and search preferences per student profile.
+model SearchPreference {
+  studentId        String   @id @map("student_id") @db.Uuid
+  minAge           Int      @default(18) @map("min_age") @db.SmallInt
+  maxAge           Int      @default(100) @map("max_age") @db.SmallInt
+  preferredGender  String?  @map("preferred_gender")
+  preferredFaculty String?  @map("preferred_faculty")
+  maxDistanceKm    Int?     @map("max_distance_km")
+  verifiedOnly     Boolean  @default(true) @map("verified_only")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  profile          Profile  @relation(fields: [studentId], references: [studentId], onDelete: Cascade)
+
+  @@map("search_preferences")
+}
+
+/// Swipe / interaction record (THICH or BO_QUA) between two student profiles.
+model Interaction {
+  actorId   String          @map("actor_id") @db.Uuid
+  targetId  String          @map("target_id") @db.Uuid
+  kind      InteractionKind
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  actor     Profile         @relation("ActorInteractions", fields: [actorId], references: [studentId], onDelete: Cascade)
+  target    Profile         @relation("TargetInteractions", fields: [targetId], references: [studentId], onDelete: Cascade)
+
+  @@id([actorId, targetId])
+  @@index([targetId], map: "interactions_target_id_idx")
+  @@map("interactions")
+}
+
+/// Block list between users.
+model Block {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  blocker   Profile  @relation("BlockerBlocks", fields: [blockerId], references: [studentId], onDelete: Cascade)
+  blocked   Profile  @relation("BlockedBlocks", fields: [blockedId], references: [studentId], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId], map: "blocks_blocked_id_idx")
+  @@map("blocks")
+}
+
+/// Mutual match between two student profiles (studentAId < studentBId).
+model Match {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentAId   String        @map("student_a_id") @db.Uuid
+  studentBId   String        @map("student_b_id") @db.Uuid
+  status       MatchStatus   @default(DA_GHEP_DOI)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  studentA     Profile       @relation("StudentAMatches", fields: [studentAId], references: [studentId], onDelete: Cascade)
+  studentB     Profile       @relation("StudentBMatches", fields: [studentBId], references: [studentId], onDelete: Cascade)
+  conversation Conversation?
+
+  @@unique([studentAId, studentBId])
+  @@index([studentBId], map: "matches_student_b_id_idx")
+  @@map("matches")
+}
+
+/// Chat conversation opened upon a mutual match.
+model Conversation {
+  id        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId   String             @unique @map("match_id") @db.Uuid
+  status    ConversationStatus @default(HOAT_DONG)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  match     Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  reads     ConversationRead[]
+
+  @@map("conversations")
+}
+
+/// Chat message within a conversation.
+model Message {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String        @map("conversation_id") @db.Uuid
+  senderId       String        @map("sender_id") @db.Uuid
+  body           String?
+  status         MessageStatus @default(DA_GUI)
+  sentAt         DateTime      @default(now()) @map("sent_at") @db.Timestamptz
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         Profile       @relation(fields: [senderId], references: [studentId], onDelete: Cascade)
+
+  @@index([conversationId, sentAt(sort: Desc), id(sort: Desc)], map: "messages_conversation_sent_idx")
+  @@index([senderId], map: "messages_sender_id_idx")
+  @@map("messages")
+}
+
+/// Tracks the last read timestamp for each participant in a conversation.
+model ConversationRead {
+  conversationId String       @map("conversation_id") @db.Uuid
+  studentId      String       @map("student_id") @db.Uuid
+  lastReadAt     DateTime     @default(now()) @map("last_read_at") @db.Timestamptz
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  student        Profile      @relation(fields: [studentId], references: [studentId], onDelete: Cascade)
+
+  @@id([conversationId, studentId])
+  @@index([studentId], map: "conversation_reads_student_id_idx")
+  @@map("conversation_reads")
+}
