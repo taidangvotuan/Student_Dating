@@ -19,26 +19,6 @@ import { AccountStatus, MatchStatus, InteractionKind } from './database/prisma.j
 
 The `prisma` export is a lazy proxy — the real client is only initialised on first access, so import order does not matter.
 
-<!-- ---
-
-### Models reference
-
-| Prisma model | Table | Key fields |
-|---|---|---|
-| `Student` | `students` | `id` (FK → `auth.users`) · `accountStatus` |
-| `Verification` | `verifications` | `studentId` · `status` · `cardStoragePath` |
-| `Profile` | `profiles` | `studentId` · `fullName` · `birthDate` · `visibility` |
-| `ProfileLocation` | `profile_locations` | `studentId` · `latitude` · `longitude` |
-| `Interest` | `interests` | `id` · `name` · `isActive` |
-| `ProfileInterest` | `profile_interests` | composite PK `(studentId, interestId)` · `isVisible` |
-| `SearchPreference` | `search_preferences` | `studentId` · `minAge` · `maxAge` · `verifiedOnly` |
-| `Interaction` | `interactions` | composite PK `(actorId, targetId)` · `kind` |
-| `Block` | `blocks` | composite PK `(blockerId, blockedId)` |
-| `Match` | `matches` | `id` · `studentAId` · `studentBId` · `status` |
-| `Conversation` | `conversations` | `id` · `matchId` · `status` |
-| `Message` | `messages` | `id` · `conversationId` · `senderId` · `body` · `status` |
-| `ConversationRead` | `conversation_reads` | composite PK `(conversationId, studentId)` · `lastReadAt` | -->
-
 ---
 
 ### Enum values

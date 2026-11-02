@@ -22,24 +22,35 @@ export interface PrismaEnvironment {
 /**
  * Resolves the PostgreSQL connection string either directly from DATABASE_URL
  * or by assembling it from individual DB_* environment variables.
+ * Automatically adds pgbouncer=true when connecting to Supabase pooler to avoid 42P05 prepared statement conflicts.
  */
 export function getDatabaseUrl(env: PrismaEnvironment = process.env): string {
+  let resolvedUrl: string;
   const rawUrl = env.DATABASE_URL?.trim();
+
   if (rawUrl) {
-    return rawUrl;
+    resolvedUrl = rawUrl;
+  } else {
+    const host = env.DB_HOST?.trim();
+    const user = env.DB_USER?.trim();
+    const password = env.DB_PASSWORD;
+
+    if (host && user && password && password !== 'YOUR_PASSWORD') {
+      const port = env.DB_PORT ? Number(env.DB_PORT) : 5432;
+      const dbName = env.DB_NAME?.trim() || 'postgres';
+      resolvedUrl = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${dbName}?sslmode=require`;
+    } else {
+      throw new Error('DATABASE_URL is required for Prisma.');
+    }
   }
 
-  const host = env.DB_HOST?.trim();
-  const user = env.DB_USER?.trim();
-  const password = env.DB_PASSWORD;
-
-  if (host && user && password && password !== 'YOUR_PASSWORD') {
-    const port = env.DB_PORT ? Number(env.DB_PORT) : 5432;
-    const dbName = env.DB_NAME?.trim() || 'postgres';
-    return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${dbName}?sslmode=require`;
+  // If using Supabase connection pooler, append pgbouncer=true to disable prepared statement caching
+  if (resolvedUrl.includes('pooler.supabase.com') && !resolvedUrl.includes('pgbouncer=true')) {
+    const separator = resolvedUrl.includes('?') ? '&' : '?';
+    resolvedUrl = `${resolvedUrl}${separator}pgbouncer=true`;
   }
 
-  throw new Error('DATABASE_URL is required for Prisma.');
+  return resolvedUrl;
 }
 
 let cachedPrisma: PrismaClient | undefined;

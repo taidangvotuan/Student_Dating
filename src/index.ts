@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
-import { logger, requestLogger, errorLogger } from './utils/logger.js';
+import { ZodError } from 'zod';
+import { AppError } from './shared/errors/AppError.js';
+import { logger, requestLogger, errorLogger } from './shared/logger/logger.js';
 import {
   supabase,
   getSupabaseClient,
@@ -15,6 +17,7 @@ import {
   verifyPrismaConnection,
   disconnectPrisma,
 } from './database/prisma.js';
+import profileRouter from './modules/profile/profile.router.js';
 
 export const app = express();
 
@@ -98,12 +101,43 @@ app.get('/api/prisma/status', async (_req: Request, res: Response) => {
   }
 });
 
+// API Routes
+app.use('/api/profile', profileRouter);
+
 // 404 Not Found Middleware
 app.use((req: Request, res: Response) => {
   res.status(404).json({
+    status: 'fail',
     error: 'Not Found',
     path: req.originalUrl || req.path,
   });
+});
+
+// Zod validation error handler
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof ZodError) {
+    return res.status(422).json({
+      status: 'fail',
+      error: 'Validation Error',
+      issues: err.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    });
+  }
+  next(err);
+});
+
+// AppError domain error handler
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      status: err.statusCode >= 500 ? 'error' : 'fail',
+      error: err.message,
+      code: err.code,
+    });
+  }
+  next(err);
 });
 
 // Error Logger Middleware
@@ -113,6 +147,7 @@ app.use(errorLogger);
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const message = err instanceof Error ? err.message : 'Internal Server Error';
   res.status(500).json({
+    status: 'error',
     error: 'Internal Server Error',
     message,
   });
@@ -120,14 +155,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 // Server startup
 const PORT = Number(process.env.PORT) || 3000;
-let server: import('node:http').Server | undefined;
 
-/**
- * Initializes and starts the application:
- * 1. Verifies connectivity to Supabase.
- * 2. Connects to PostgreSQL via Prisma Client.
- * 3. Starts the HTTP server if all checks pass.
- */
 export async function startApplication(exitOnError = true): Promise<void> {
   let supabaseUrl = 'unknown';
   try {
@@ -148,7 +176,6 @@ export async function startApplication(exitOnError = true): Promise<void> {
     app.listen(PORT, () => {
       logger.info(`🚀 Student Dating API server is running on http://localhost:${PORT}`);
     });
-
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Application startup failure: ${message}`, {
