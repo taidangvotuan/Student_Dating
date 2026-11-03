@@ -312,6 +312,35 @@ Upsert the authenticated user's search preferences.
 
 ---
 
+### `GET /api/discovery/criteria`
+
+Get the authenticated user's discovery search criteria. If no criteria have
+been saved yet, defaults are returned (`minAge: 18`, `maxAge: 100`,
+`maxDistanceKm: null`, `verifiedOnly: true`).
+
+### `PUT /api/discovery/criteria`
+
+Update one or more discovery criteria. Omitted fields remain unchanged; nullable
+filters (`preferredGender`, `preferredFaculty`, and `maxDistanceKm`) can be
+cleared by sending `null`. The effective minimum age cannot exceed the maximum
+age.
+
+**Request Body:**
+```json
+{
+  "minAge": 18,
+  "maxAge": 25,
+  "preferredGender": "Nữ",
+  "preferredFaculty": null,
+  "maxDistanceKm": 10,
+  "verifiedOnly": false
+}
+```
+
+Both endpoints return `{ "status": "success", "data": { ...criteria } }`.
+
+---
+
 ### `GET /api/profile/interests`
 
 List all globally available, active interest tags.

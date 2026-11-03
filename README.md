@@ -118,6 +118,7 @@ Runs all `test/*.test.ts` files using the Node.js native test runner with `tsx`.
 |------|----------|
 | `test/authenticate.test.ts` | JWT middleware (valid, missing, invalid, malformed header) |
 | `test/profile.test.ts` | Profile controller and service logic |
+| `test/profile-seeding.test.ts` | Faker profile data and test-project seed guard |
 
 ### Verify database connectivity
 
@@ -126,6 +127,16 @@ npm run db:check
 ```
 
 Live check against both Supabase Auth and PostgreSQL. Requires `.env` to be configured.
+
+### Seed test profiles
+
+The profile seeder updates profiles for 150 existing students and does not create Auth users, students, verifications, or search preferences. Set `SEED_TEST_DATA=true` and `SEED_TEST_PROJECT_REF` in `.env` to the ref of a dedicated Supabase test project; the script checks that both `SUPABASE_URL` and `DATABASE_URL` target that project before writing.
+
+```bash
+npm run db:seed:profiles
+```
+
+Do not enable this seed guard for a production project.
 
 ---
 
