@@ -341,6 +341,34 @@ Both endpoints return `{ "status": "success", "data": { ...criteria } }`.
 
 ---
 
+### `POST /api/interactions/:targetId/like`
+### `POST /api/interactions/:targetId/skip`
+### `POST /api/interactions/:targetId/block`
+
+Like, skip, or block an active profile. The authenticated user's ID is used as
+the actor; `targetId` in the URL must identify another active profile. These
+endpoints do not require a request body.
+
+Repeating an action is safe; like/skip updates the current interaction. A
+reciprocal like creates or reactivates a match and its conversation, and
+returns `matched: true` with the `matchId`. A block removes interactions in
+both directions, cancels an existing match, and disables its conversation. A
+blocked pair cannot like or skip each other.
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "action": "THICH",
+    "matched": false,
+    "matchId": null
+  }
+}
+```
+
+---
+
 ### `GET /api/profile/interests`
 
 List all globally available, active interest tags.
