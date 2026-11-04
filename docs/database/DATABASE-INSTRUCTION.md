@@ -2,6 +2,8 @@
 
 > Source files: [`prisma/schema.prisma`](../../prisma/schema.prisma) · [`src/database/prisma.ts`](../../src/database/prisma.ts)
 
+Tra cứu mục đích của từng bảng, danh sách cột, kiểu PostgreSQL và ràng buộc tại [mô tả bảng và cột](DATABASE-SCHEMA.md#31-table-and-column-descriptions). Tài liệu schema cũng ghi các khác biệt hiện có giữa migration SQL và Prisma cần đối chiếu trước khi thay đổi database.
+
 ---
 
 ## 1. Using the Prisma Client in Code

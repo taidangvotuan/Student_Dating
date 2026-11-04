@@ -116,6 +116,205 @@ The original domain classes, now kept in `gg/`, map to tables as follows. The cu
 
 `matches.student_a_id < student_b_id` stores each pair in one canonical order. A match is created by the trusted server only after two `THICH` interactions, with no block in either direction and both accounts eligible. Creating a block must cancel any active match/conversation for that pair in the same transaction. Chat sends must be checked by the server for active match, active conversation, sender membership and block state. These cross-table rules are **not** enforced by the DDL alone.
 
+### 3.1. Table and column descriptions
+
+Mô tả dưới đây gồm đủ 13 bảng ứng dụng và các cột được định nghĩa trong migration SQL ban đầu. `auth.users` do Supabase Auth quản lý riêng: các bảng ứng dụng tham chiếu `auth.users.id`, còn email và thông tin xác thực không được lưu lặp trong `profiles`.
+
+Ký hiệu: **PK** = khóa chính, **FK** = khóa ngoại, **NULL: Có** = cột cho phép để trống. Khóa chính ghép được ghi dưới bảng tương ứng. Kiểu dữ liệu ở đây là kiểu PostgreSQL, không phải tên kiểu TypeScript/Prisma.
+
+| Kiểu | Ý nghĩa |
+| --- | --- |
+| `uuid` | Mã định danh UUID. |
+| `text` | Chuỗi văn bản; trạng thái được giới hạn bằng `CHECK` trong SQL. |
+| `date` | Ngày, không chứa giờ. |
+| `timestamptz` | Thời điểm có thông tin múi giờ. |
+| `boolean` | Giá trị `true` hoặc `false`. |
+| `smallint`, `integer` | Số nguyên. |
+| `double precision` | Số thực, dùng cho tọa độ. |
+
+#### public.students
+
+Lưu trạng thái tài khoản sinh viên, liên kết một-một với tài khoản Supabase Auth.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Không | PK, FK → `auth.users.id`; dùng chung UUID với tài khoản Auth. |
+| `account_status` | `text` | Không | `HOAT_DONG`, `TAM_KHOA`, `KHOA_VINH_VIEN`; mặc định `HOAT_DONG`. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+#### student_private.verifications
+
+Lưu hồ sơ xác minh sinh viên và kết quả xét duyệt. `card_storage_path` là đường dẫn đối tượng Storage, không phải nội dung ảnh hay URL công khai.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `student_id` | `uuid` | Không | PK, FK → `public.students.id`; mỗi sinh viên có tối đa một hồ sơ xác minh. |
+| `student_number` | `text` | Có | Mã số sinh viên. |
+| `university_name` | `text` | Có | Tên trường đại học. |
+| `card_storage_path` | `text` | Có | Đường dẫn ảnh giấy tờ trong Storage riêng tư. |
+| `status` | `text` | Không | `CHUA_XAC_THUC`, `CHO_DUYET`, `DA_XAC_THUC`, `TU_CHOI`; mặc định `CHUA_XAC_THUC`. |
+| `reviewer_id` | `uuid` | Có | FK → `auth.users.id`; tài khoản người xét duyệt. |
+| `rejection_reason` | `text` | Có | Lý do từ chối hồ sơ. |
+| `submitted_at` | `timestamptz` | Có | Thời điểm nộp hồ sơ. |
+| `reviewed_at` | `timestamptz` | Có | Thời điểm xét duyệt. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+Cặp `(university_name, student_number)` là duy nhất khi cả hai có giá trị. Khi trạng thái khác `CHUA_XAC_THUC`, phải có mã sinh viên, tên trường, đường dẫn ảnh và thời điểm nộp. Trạng thái đã duyệt/từ chối cần người duyệt và thời điểm duyệt; `TU_CHOI` cần thêm lý do không rỗng.
+
+#### public.profiles
+
+Lưu hồ sơ hẹn hò của sinh viên: thông tin cá nhân hiển thị, giới thiệu, thông tin học tập và trạng thái hiển thị.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `student_id` | `uuid` | Không | PK, FK → `public.students.id`; mỗi sinh viên có tối đa một hồ sơ. |
+| `full_name` | `text` | Không | Họ tên; không được rỗng hoặc chỉ có khoảng trắng. |
+| `birth_date` | `date` | Không | Ngày sinh, dùng để tính tuổi. |
+| `gender` | `text` | Có | Giới tính; SQL chưa giới hạn tập giá trị. |
+| `bio` | `text` | Có | Giới thiệu bản thân, tối đa 2.000 ký tự. |
+| `faculty` | `text` | Có | Khoa/ngành học. |
+| `cohort` | `text` | Có | Khóa học. |
+| `connection_goal` | `text` | Có | Mục tiêu kết nối/hẹn hò. |
+| `visibility` | `text` | Không | `CON_HOAT_DONG`, `BI_AN`, `BI_KHOA`, `NGUNG_SU_DUNG`; mặc định `BI_AN`. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+#### student_private.profile_locations
+
+Lưu tọa độ chính xác gần nhất của hồ sơ để backend tính khoảng cách. Dữ liệu này nằm trong schema riêng tư theo migration ban đầu.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `student_id` | `uuid` | Không | PK, FK → `public.profiles.student_id`. |
+| `latitude` | `double precision` | Không | Vĩ độ, từ -90 đến 90. |
+| `longitude` | `double precision` | Không | Kinh độ, từ -180 đến 180. |
+| `updated_at` | `timestamptz` | Không | Thời điểm cập nhật vị trí; mặc định `now()`. |
+
+#### public.interests
+
+Danh mục sở thích dùng chung để sinh viên lựa chọn cho hồ sơ.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Không | PK; mặc định sinh UUID bằng `gen_random_uuid()`. |
+| `name` | `text` | Không | Tên sở thích; duy nhất và không rỗng. |
+| `is_active` | `boolean` | Không | Sở thích còn được sử dụng trong danh mục; mặc định `true`. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+#### public.profile_interests
+
+Bảng nối nhiều-nhiều giữa hồ sơ và sở thích; mỗi dòng là một sở thích đã được sinh viên chọn.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `student_id` | `uuid` | Không | Thành phần PK, FK → `public.profiles.student_id`. |
+| `interest_id` | `uuid` | Không | Thành phần PK, FK → `public.interests.id`. |
+| `is_visible` | `boolean` | Không | Cho phép hiển thị sở thích này trên hồ sơ; mặc định `true`. |
+| `created_at` | `timestamptz` | Không | Thời điểm chọn; mặc định `now()`. |
+
+PK ghép `(student_id, interest_id)` ngăn một hồ sơ chọn trùng cùng sở thích.
+
+#### public.search_preferences
+
+Lưu bộ lọc tìm kiếm/đề xuất của từng hồ sơ: độ tuổi, giới tính, khoa, khoảng cách và yêu cầu xác minh.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `student_id` | `uuid` | Không | PK, FK → `public.profiles.student_id`. |
+| `min_age` | `smallint` | Không | Tuổi tối thiểu, từ 18 đến 100; mặc định 18. |
+| `max_age` | `smallint` | Không | Tuổi tối đa, từ 18 đến 100; mặc định 100. |
+| `preferred_gender` | `text` | Có | Giới tính mong muốn. |
+| `preferred_faculty` | `text` | Có | Khoa/ngành mong muốn. |
+| `max_distance_km` | `integer` | Có | Khoảng cách tối đa tính bằng km, từ 1 đến 1.000. |
+| `verified_only` | `boolean` | Không | Chỉ đề xuất hồ sơ đã xác minh; mặc định `true`. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+SQL yêu cầu `min_age <= max_age`; backend áp dụng các bộ lọc này khi tìm hồ sơ.
+
+#### public.interactions
+
+Lưu lựa chọn thích hoặc bỏ qua từ một hồ sơ tới hồ sơ khác, có phân biệt chiều tương tác.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `actor_id` | `uuid` | Không | Thành phần PK, FK → `public.profiles.student_id`; người thực hiện. |
+| `target_id` | `uuid` | Không | Thành phần PK, FK → `public.profiles.student_id`; người được tương tác. |
+| `kind` | `text` | Không | `THICH` hoặc `BO_QUA`. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo tương tác; mặc định `now()`. |
+
+PK ghép `(actor_id, target_id)` giới hạn một dòng cho mỗi cặp có hướng; `actor_id` phải khác `target_id`.
+
+#### public.blocks
+
+Lưu danh sách chặn có hướng: một sinh viên chặn sinh viên khác.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `blocker_id` | `uuid` | Không | Thành phần PK, FK → `public.profiles.student_id`; người chặn. |
+| `blocked_id` | `uuid` | Không | Thành phần PK, FK → `public.profiles.student_id`; người bị chặn. |
+| `created_at` | `timestamptz` | Không | Thời điểm chặn; mặc định `now()`. |
+
+PK ghép `(blocker_id, blocked_id)` ngăn chặn trùng; hai ID phải khác nhau.
+
+#### public.matches
+
+Lưu cặp hồ sơ đã ghép đôi và trạng thái kết nối giữa hai sinh viên.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Không | PK; mặc định `gen_random_uuid()`. |
+| `student_a_id` | `uuid` | Không | FK → `public.profiles.student_id`; UUID nhỏ hơn trong cặp. |
+| `student_b_id` | `uuid` | Không | FK → `public.profiles.student_id`; UUID lớn hơn trong cặp. |
+| `status` | `text` | Không | `DA_GHEP_DOI`, `DANG_HOAT_DONG`, `DA_HUY`; mặc định `DA_GHEP_DOI`. |
+| `created_at` | `timestamptz` | Không | Thời điểm ghép đôi; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+Cặp `(student_a_id, student_b_id)` là duy nhất, với `student_a_id < student_b_id`, nên không lưu trùng cặp theo chiều ngược lại.
+
+#### public.conversations
+
+Lưu cuộc trò chuyện của một cặp đã ghép đôi; mỗi match có tối đa một cuộc trò chuyện.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Không | PK; mặc định `gen_random_uuid()`. |
+| `match_id` | `uuid` | Không | FK → `public.matches.id`; duy nhất. |
+| `status` | `text` | Không | `HOAT_DONG` hoặc `KHONG_HOAT_DONG`; mặc định `HOAT_DONG`. |
+| `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
+| `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
+
+#### public.messages
+
+Lưu tin nhắn trong cuộc trò chuyện, người gửi và trạng thái xóa mềm.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Không | PK; mặc định `gen_random_uuid()`. |
+| `conversation_id` | `uuid` | Không | FK → `public.conversations.id`; cuộc trò chuyện chứa tin nhắn. |
+| `sender_id` | `uuid` | Không | FK → `public.profiles.student_id`; người gửi. |
+| `body` | `text` | Có | Nội dung; phải có khi `DA_GUI`, phải là `NULL` khi `DA_XOA`. |
+| `status` | `text` | Không | `DA_GUI` hoặc `DA_XOA`; mặc định `DA_GUI`. |
+| `sent_at` | `timestamptz` | Không | Thời điểm gửi; mặc định `now()`. |
+| `deleted_at` | `timestamptz` | Có | Thời điểm xóa mềm. |
+
+Tin `DA_GUI` phải có nội dung không rỗng, tối đa 5.000 ký tự và chưa có `deleted_at`. Tin `DA_XOA` phải xóa nội dung về `NULL` và có `deleted_at`.
+
+#### public.conversation_reads
+
+Lưu mốc đọc gần nhất của từng sinh viên trong từng cuộc trò chuyện để tính tin chưa đọc.
+
+| Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
+| --- | --- | --- | --- |
+| `conversation_id` | `uuid` | Không | Thành phần PK, FK → `public.conversations.id`. |
+| `student_id` | `uuid` | Không | Thành phần PK, FK → `public.profiles.student_id`; người đọc. |
+| `last_read_at` | `timestamptz` | Không | Mốc đọc gần nhất; mặc định `now()`. |
+
+PK ghép `(conversation_id, student_id)` giữ một mốc đọc cho mỗi người trong một cuộc trò chuyện. Backend phải kiểm tra người đọc là thành viên của cuộc trò chuyện.
+
 ## 4. Security and access
 
 - In the initial SQL migration, every application table has RLS enabled. `student_private` has no Data API grants or RLS policies, so its data is accessible only to privileged server processes.
