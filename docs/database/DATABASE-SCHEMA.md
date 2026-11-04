@@ -4,11 +4,11 @@
 
 - **Engine:** PostgreSQL managed by Supabase. The supplied host identifies the intended project; no credentials are stored here.
 - **Authentication:** Supabase Auth (`auth.users`) owns email, password and email OTP. Do not add a second password or OTP table.
-- **Query layer:** `src/database.ts` provides a server-side PostgreSQL pool and `npm run db:check` tests connectivity. Domain classes still use in-memory state; no application flow writes to this pool yet.
-- **Migration:** [`20261031000000_initial_student_dating.sql`](../../supabase/migrations/20261031000000_initial_student_dating.sql) is an initial migration for an empty Supabase project. Run it only after checking the target project and taking a backup if it contains data.
+- **Query layer:** The backend uses the Prisma singleton in [`src/database/prisma.ts`](../../src/database/prisma.ts). The profile module reads and updates profiles, interests and search preferences through Prisma. See [`DATABASE-INSTRUCTION.md`](DATABASE-INSTRUCTION.md) for query examples and connection setup.
+- **Migrations:** [`20261031000000_initial_student_dating.sql`](../../supabase/migrations/20261031000000_initial_student_dating.sql) defines the initial tables and access policies. [`20261102000000_auth_profile_triggers.sql`](../../supabase/migrations/20261102000000_auth_profile_triggers.sql) adds signup validation and provisioning triggers. Check the schema differences below before applying migrations to an existing database.
 - **Names:** plural `snake_case` tables/columns, UUID keys aligned with `auth.users.id`, `timestamptz` for instants.
 
-The attached sports-court booking diagram is not the domain of this repository. This schema follows the implemented student verification, recommendation, interaction, match and chat models.
+The schema covers student verification, dating profiles, discovery preferences, interactions, matches and chat.
 
 ## 2. Entity-relationship diagram
 
@@ -92,11 +92,18 @@ erDiagram
     }
 ```
 
-`AUTH_USERS` is Supabase managed. `VERIFICATIONS` and `PROFILE_LOCATIONS` are in the `student_private` schema; all other application tables are in `public`.
+`AUTH_USERS` is Supabase managed. In the initial SQL migration, `VERIFICATIONS` and `PROFILE_LOCATIONS` are in `student_private`; all other application tables are in `public`. The Prisma schema currently differs from this layout, as described below.
 
 ## 3. Physical schema and domain mapping
 
-The migration is the single source of truth for DDL. Key mappings from the current TypeScript models:
+The SQL migrations define the physical DDL documented here. The current [`prisma/schema.prisma`](../../prisma/schema.prisma) maps the same application table and column names, but two differences need reconciliation:
+
+- `Verification` and `ProfileLocation` currently target `public`, while the initial migration creates `student_private.verifications` and `student_private.profile_locations`. The signup trigger also writes to `public.verifications`.
+- SQL status columns are `text` with `CHECK` constraints; Prisma declares native enum types. Do not assume that a Prisma enum is already present in the deployed database.
+
+These are differences between repository files; the current live database layout has not been verified for this documentation update.
+
+The original domain classes, now kept in `gg/`, map to tables as follows. The current profile API uses Prisma models instead of those in-memory classes.
 
 | Code | Database | Note |
 | --- | --- | --- |
@@ -111,7 +118,7 @@ The migration is the single source of truth for DDL. Key mappings from the curre
 
 ## 4. Security and access
 
-- Every application table has RLS enabled. `student_private` has no Data API grants or RLS policies, so its data is accessible only to privileged server processes.
+- In the initial SQL migration, every application table has RLS enabled. `student_private` has no Data API grants or RLS policies, so its data is accessible only to privileged server processes.
 - A signed-in user can read their own account, profile, preferences, interactions and blocks; matched users can read each other's visible profile and chat history. `anon` has no table grants.
 - Clients can edit their own profile, interest selections and search preferences. They cannot write verification decisions, interactions, blocks, matches or chat records directly. The trusted backend must implement these commands, verify the caller, and use a privileged PostgreSQL connection for `student_private` data.
 - `students.account_status` and `profiles.visibility` are distinct. Only the backend may lock an account or set `BI_KHOA`/`NGUNG_SU_DUNG`.
@@ -128,4 +135,4 @@ This is an initial schema: no rollback script or data backfill is included becau
 
 ## 6. Integration work still required
 
-The existing TypeScript classes use memory maps, so the new connection configuration does not yet persist application data to Supabase. The backend still needs an Auth signup hook/service to create `students` and require a `.edu.vn` email, API authorization for privileged writes, Storage policy for identity images, and integration tests for RLS using two distinct user identities. `updated_at` fields must be set by application writes; there is no automatic trigger in this initial design.
+The profile API now persists data through Prisma, and signup provisioning is implemented in the auth trigger migration. Reconcile the SQL/Prisma schema and status-type differences listed in section 3 before relying on them together. Matching, blocking and chat commands still need the authorization and transaction rules described above, plus private Storage policies and integration tests for RLS using two distinct user identities. Prisma's `@updatedAt` updates timestamps for Prisma writes; raw SQL writes must set `updated_at` explicitly because the SQL migrations do not define an automatic timestamp trigger.
