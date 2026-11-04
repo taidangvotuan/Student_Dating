@@ -5,7 +5,7 @@
 - **Engine:** PostgreSQL managed by Supabase. The supplied host identifies the intended project; no credentials are stored here.
 - **Authentication:** Supabase Auth (`auth.users`) owns email, password and email OTP. Do not add a second password or OTP table.
 - **Query layer:** The backend uses the Prisma singleton in [`src/database/prisma.ts`](../../src/database/prisma.ts). The profile module reads and updates profiles, interests and search preferences through Prisma. See [`DATABASE-INSTRUCTION.md`](DATABASE-INSTRUCTION.md) for query examples and connection setup.
-- **Migrations:** [`20261031000000_initial_student_dating.sql`](../../supabase/migrations/20261031000000_initial_student_dating.sql) defines the initial tables and access policies. [`20261102000000_auth_profile_triggers.sql`](../../supabase/migrations/20261102000000_auth_profile_triggers.sql) adds signup validation and provisioning triggers. Check the schema differences below before applying migrations to an existing database.
+- **Migrations:** [`20261031000000_initial_student_dating.sql`](../../supabase/migrations/20261031000000_initial_student_dating.sql) defines the initial tables and access policies. [`20261102000000_auth_profile_triggers.sql`](../../supabase/migrations/20261102000000_auth_profile_triggers.sql) adds signup validation and provisioning triggers. [`20261105000000_move_verifications_to_public.sql`](../../supabase/migrations/20261105000000_move_verifications_to_public.sql) moves verification records to `public` to match Prisma and the signup trigger. Check the remaining schema differences below before applying migrations to an existing database.
 - **Names:** plural `snake_case` tables/columns, UUID keys aligned with `auth.users.id`, `timestamptz` for instants.
 
 The schema covers student verification, dating profiles, discovery preferences, interactions, matches and chat.
@@ -92,13 +92,13 @@ erDiagram
     }
 ```
 
-`AUTH_USERS` is Supabase managed. In the initial SQL migration, `VERIFICATIONS` and `PROFILE_LOCATIONS` are in `student_private`; all other application tables are in `public`. The Prisma schema currently differs from this layout, as described below.
+`AUTH_USERS` is Supabase managed. After applying the migrations in order, `VERIFICATIONS` and `STUDENTS` are in `public`; only `PROFILE_LOCATIONS` remains in `student_private`. `STUDENTS` has been in `public` since the initial migration. A table's schema name does not grant client access: verification records remain restricted to the backend.
 
 ## 3. Physical schema and domain mapping
 
 The SQL migrations define the physical DDL documented here. The current [`prisma/schema.prisma`](../../prisma/schema.prisma) maps the same application table and column names, but two differences need reconciliation:
 
-- `Verification` and `ProfileLocation` currently target `public`, while the initial migration creates `student_private.verifications` and `student_private.profile_locations`. The signup trigger also writes to `public.verifications`.
+- `Verification` and the signup trigger both target `public.verifications`; migration `20261105000000` brings the SQL layout into alignment. `ProfileLocation` still targets `public`, while SQL creates `student_private.profile_locations`; this remaining difference needs reconciliation separately.
 - SQL status columns are `text` with `CHECK` constraints; Prisma declares native enum types. Do not assume that a Prisma enum is already present in the deployed database.
 
 These are differences between repository files; the current live database layout has not been verified for this documentation update.
@@ -108,7 +108,7 @@ The original domain classes, now kept in `gg/`, map to tables as follows. The cu
 | Code | Database | Note |
 | --- | --- | --- |
 | `StudentAccountManager` | `auth.users`, `students`, `profiles` | `email` stays in Auth; `fullName` is `profiles.full_name`. |
-| `CampusVerification` | `auth.users`, `student_private.verifications` | Supabase Auth handles email OTP; card/CCCD path and review decision are private. |
+| `CampusVerification` | `auth.users`, `public.verifications` | Supabase Auth handles email OTP; card/CCCD path and review decision require backend access. |
 | `SinhVien`, `HoSoHenHo` | `students`, `profiles`, `student_private.profile_locations` | Exact GPS coordinates are never exposed through the Data API. |
 | `SoThich`, `TieuChiTimKiem` | `interests`, `profile_interests`, `search_preferences` | Many-to-many interests use an explicit join table. |
 | `LuotThich`, `ChanNguoiDung` | `interactions`, `blocks` | One interaction per ordered pair; blocking is directional. |
@@ -118,7 +118,7 @@ The original domain classes, now kept in `gg/`, map to tables as follows. The cu
 
 ### 3.1. Table and column descriptions
 
-Mô tả dưới đây gồm đủ 13 bảng ứng dụng và các cột được định nghĩa trong migration SQL ban đầu. `auth.users` do Supabase Auth quản lý riêng: các bảng ứng dụng tham chiếu `auth.users.id`, còn email và thông tin xác thực không được lưu lặp trong `profiles`.
+Mô tả dưới đây gồm đủ 13 bảng ứng dụng sau khi áp dụng các migration theo thứ tự. Tên cột và kiểu dữ liệu lấy từ migration ban đầu; vị trí `verifications` được cập nhật theo migration `20261105000000`. `auth.users` do Supabase Auth quản lý riêng: các bảng ứng dụng tham chiếu `auth.users.id`, còn email và thông tin xác thực không được lưu lặp trong `profiles`.
 
 Ký hiệu: **PK** = khóa chính, **FK** = khóa ngoại, **NULL: Có** = cột cho phép để trống. Khóa chính ghép được ghi dưới bảng tương ứng. Kiểu dữ liệu ở đây là kiểu PostgreSQL, không phải tên kiểu TypeScript/Prisma.
 
@@ -143,9 +143,9 @@ Lưu trạng thái tài khoản sinh viên, liên kết một-một với tài k
 | `created_at` | `timestamptz` | Không | Thời điểm tạo; mặc định `now()`. |
 | `updated_at` | `timestamptz` | Không | Lần cập nhật gần nhất; mặc định `now()`. |
 
-#### student_private.verifications
+#### public.verifications
 
-Lưu hồ sơ xác minh sinh viên và kết quả xét duyệt. `card_storage_path` là đường dẫn đối tượng Storage, không phải nội dung ảnh hay URL công khai.
+Lưu hồ sơ xác minh sinh viên và kết quả xét duyệt. `card_storage_path` là đường dẫn đối tượng Storage, không phải nội dung ảnh hay URL công khai. Bảng nằm ở `public` để backend dùng Prisma và trigger đăng ký; `anon` và `authenticated` không được truy cập trực tiếp.
 
 | Cột | Kiểu PostgreSQL | NULL | Ý nghĩa / ràng buộc |
 | --- | --- | --- | --- |
@@ -317,7 +317,7 @@ PK ghép `(conversation_id, student_id)` giữ một mốc đọc cho mỗi ngư
 
 ## 4. Security and access
 
-- In the initial SQL migration, every application table has RLS enabled. `student_private` has no Data API grants or RLS policies, so its data is accessible only to privileged server processes.
+- Every application table has RLS enabled. `student_private.profile_locations` remains inaccessible to API roles. Migration `20261105000000` preserves RLS on `public.verifications` and revokes all table privileges from `PUBLIC`, `anon` and `authenticated`; moving the table does not expose verification documents or review details through the Data API.
 - A signed-in user can read their own account, profile, preferences, interactions and blocks; matched users can read each other's visible profile and chat history. `anon` has no table grants.
 - Clients can edit their own profile, interest selections and search preferences. They cannot write verification decisions, interactions, blocks, matches or chat records directly. The trusted backend must implement these commands, verify the caller, and use a privileged PostgreSQL connection for `student_private` data.
 - `students.account_status` and `profiles.visibility` are distinct. Only the backend may lock an account or set `BI_KHOA`/`NGUNG_SU_DUNG`.
@@ -330,8 +330,10 @@ Foreign keys not covered by a leading primary/unique key have indexes. `matches`
 
 This is an initial schema: no rollback script or data backfill is included because the repository has no prior database schema. If this project already has tables or users, review and adapt the migration before applying it. Future breaking changes should use the repository's expand/backfill/switch/contract workflow.
 
+Migration `20261105000000` uses `ALTER TABLE ... SET SCHEMA` in a transaction, retaining verification rows, indexes and constraints. It also accepts an already-moved table. If both schemas contain a `verifications` table, or neither does, it stops without merging or dropping data. Inspect and reconcile duplicate tables before retrying. The migration has been checked locally; it has not been applied to the live Supabase project as part of this review fix.
+
 **Deployment record (2026-10-31):** Applied migration `20261031000000` to Supabase project `qsnwyxjqrpskochuvtod` with Supabase CLI 2.122.0. A read-only check afterward found 13 application tables, RLS enabled on all 13, 19 policies and a matching migration-history entry. The private schema was inaccessible to `anon` and `authenticated` in the privilege check.
 
 ## 6. Integration work still required
 
-The profile API now persists data through Prisma, and signup provisioning is implemented in the auth trigger migration. Reconcile the SQL/Prisma schema and status-type differences listed in section 3 before relying on them together. Matching, blocking and chat commands still need the authorization and transaction rules described above, plus private Storage policies and integration tests for RLS using two distinct user identities. Prisma's `@updatedAt` updates timestamps for Prisma writes; raw SQL writes must set `updated_at` explicitly because the SQL migrations do not define an automatic timestamp trigger.
+The profile API now persists data through Prisma, and signup provisioning is implemented in the auth trigger migration. Apply the verification schema migration and reconcile the remaining `ProfileLocation` schema and status-type differences listed in section 3 before relying on them together. Matching, blocking and chat commands must enforce the authorization and transaction rules described above; private Storage policies and integration tests for RLS using two distinct user identities are also required. Prisma's `@updatedAt` updates timestamps for Prisma writes; raw SQL writes must set `updated_at` explicitly because the SQL migrations do not define an automatic timestamp trigger.

@@ -185,6 +185,16 @@ process.on('SIGTERM', async () => {
 
 ## 2. Migrations
 
+### Kiểm tra migration chuyển bảng xác minh
+
+Sau khi áp dụng các migration trên PostgreSQL kiểm thử, chạy bài kiểm tra SQL bằng `psql`:
+
+```bash
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/verifications_public.sql
+```
+
+Bài kiểm tra xác nhận `students` và `verifications` ở `public`, vị trí chính xác vẫn ở `student_private`, khóa ngoại còn nguyên, RLS bật và các vai trò API không có quyền truy cập trực tiếp hồ sơ xác minh. Bài kiểm tra không sửa dữ liệu ứng dụng.
+
 ### Scripts
 
 | Script | Command | When to use |
