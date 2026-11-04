@@ -350,19 +350,18 @@ the actor; `targetId` in the URL must identify another active profile. These
 endpoints do not require a request body.
 
 Repeating an action is safe; like/skip updates the current interaction. A
-reciprocal like creates or reactivates a match and its conversation, and
-returns `matched: true` with the `matchId`. A block removes interactions in
-both directions, cancels an existing match, and disables its conversation. A
-blocked pair cannot like or skip each other.
+successful like emits an internal event for asynchronous matching; the
+response confirms the like was saved and does not report whether a match was
+created. A block removes interactions in both directions, cancels an existing
+match, and disables its conversation. A blocked pair cannot like or skip each
+other.
 
 **Response `200`:**
 ```json
 {
   "status": "success",
   "data": {
-    "action": "THICH",
-    "matched": false,
-    "matchId": null
+    "action": "THICH"
   }
 }
 ```

@@ -4,38 +4,6 @@ _Last updated: 2026-11-02_
 
 ---
 
-## Database
-
-### Schema (`supabase/migrations/20261031000000_initial_student_dating.sql`)
-- **Status: ✅ Complete**
-- Full schema defined and applied to Supabase PostgreSQL.
-- Tables: `students`, `profiles`, `verifications`, `interests`, `profile_interests`, `preferences`, `matches`, `conversations`, `messages`.
-- Row-Level Security (RLS) policies enabled on all `public.*` tables.
-- Enums: `AccountStatus`, `ProfileVisibility`, `VerificationStatus`, `InteractionKind`, `MatchStatus`, `ConversationStatus`, `MessageStatus`.
-
----
-
-## Prisma
-
-### ORM Setup (`prisma/schema.prisma`, `src/database/prisma.ts`)
-- **Status: ✅ Complete**
-- Prisma 6 configured with Supabase connection pooler (PgBouncer).
-- `DATABASE_URL` includes `?pgbouncer=true` to prevent prepared statement conflicts on the transaction pooler.
-- Singleton `PrismaClient` exported from `src/database/prisma.ts`.
-- All public schema tables modelled in `prisma/schema.prisma`.
-- Prisma client generated and validated.
-
-### Scripts available
-| Script | Command |
-|--------|---------|
-| Generate client | `npm run prisma:generate` |
-| Validate schema | `npm run prisma:validate` |
-| Create migration | `npm run prisma:migrate` |
-| Push schema | `npm run db:push` |
-| Prisma Studio | `npm run prisma:studio` |
-
----
-
 ## Authentication
 
 ### JWT Middleware (`src/shared/middleware/authenticate.ts`)
@@ -50,29 +18,6 @@ _Last updated: 2026-11-02_
 - **Status: ✅ Complete**
 - Single `supabaseAdmin` instance using `SUPABASE_SERVICE_ROLE_KEY`.
 - Used exclusively by the `authenticate` middleware; never returned in responses.
-
----
-
-## Authentication Triggers
-
-### Migration (`supabase/migrations/20261102000000_auth_profile_triggers.sql`)
-- **Status: ✅ Complete — applied to live database**
-
-Two PostgreSQL trigger functions on `auth.users`:
-
-#### `validate_auth_user_signup` (BEFORE INSERT)
-Rejects signup with `P0001` exception if any condition fails:
-- [x] Email must end with `.edu.vn`
-- [x] `fullname` metadata must be non-empty
-- [x] `birthday` metadata must be present, valid `YYYY-MM-DD` format, and in the past
-
-#### `handle_new_auth_user` (AFTER INSERT)
-On successful signup, automatically creates:
-- [x] `public.students` row — `student_id` extracted from first 8 characters of email, `accountStatus = HOAT_DONG`
-- [x] `public.profiles` row — populated with `fullname`, `birthday`, `gender`, `faculty`, `cohort` from signup metadata
-- [x] `public.verifications` row — `status = CHUA_XAC_THUC`
-
-Both triggers are live and verified on the Supabase project.
 
 ---
 
@@ -97,3 +42,49 @@ Both triggers are live and verified on the Supabase project.
 | `PUT` | `/api/profile/interests` | Replace own interest selections |
 | `PUT` | `/api/profile/preferences` | Upsert own search preferences |
 | `GET` | `/api/profile/interests` | List all active global interest tags |
+
+---
+
+## Discovery Module
+
+### Implementation (`src/modules/discovery/`)
+- **Status: ✅ Complete**
+- Returns eligible profiles according to the authenticated user's search criteria.
+- Excludes profiles that are unavailable, already interacted with, blocked, or already matched.
+- Uses bounded pagination and a single feed query for the discovery results.
+
+---
+
+## Interaction Module
+
+### Implementation (`src/modules/interaction/`)
+- **Status: ✅ Complete**
+- Provides separate authenticated actions for like, skip, and block, with `targetId` in the URL.
+- Persists likes before publishing `interaction.like-created`; the successful like response reports the action only and does not wait for matching.
+- Blocks clear interactions between the users and delegate match cancellation and conversation deactivation to the Matching module.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/interactions/:targetId/like` | Like a profile |
+| `POST` | `/api/interactions/:targetId/skip` | Skip a profile |
+| `POST` | `/api/interactions/:targetId/block` | Block a profile |
+
+---
+
+## Matching Module
+
+### Implementation (`src/modules/matching/`)
+- **Status: ✅ Complete**
+- Handles `interaction.like-created` asynchronously through a listener initialized at application startup.
+- Creates or reactivates a match only when both accounts are active, there is no block in either direction, and a reciprocal like exists.
+- Owns match cancellation and deactivates associated conversations when a block occurs.
+- Conversation creation and match notifications are not implemented; they remain future chat/notification responsibilities.
+
+### Shared Event Bus (`src/shared/events/`)
+- **Status: ✅ Complete**
+- Provides a generic in-process `EventBus<Events>` and the shared interaction event contract.
+- Event delivery is not durable and is limited to the current process; there is no retry or cross-instance delivery.
+
+### Verification
+- `npm test` — 57 tests passed.
+- `npm run build` — passed.

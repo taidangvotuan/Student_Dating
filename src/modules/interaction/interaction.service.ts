@@ -4,8 +4,23 @@ import {
   interactionRepository,
   type InteractionRepository,
 } from './interaction.repository.js';
+import type { EventBus } from '../../shared/events/event-bus.js';
+import {
+  interactionEventBus,
+  type InteractionEvents,
+} from '../../shared/events/interaction.events.js';
+import {
+  cancelMatchAndDeactivateConversation,
+  type MatchingService,
+} from '../matching/matching.service.js';
 
-export function createInteractionService(repository: InteractionRepository) {
+export function createInteractionService(
+  repository: InteractionRepository,
+  eventBus: EventBus<InteractionEvents> = interactionEventBus,
+  matching: Pick<MatchingService, 'cancelMatchAndDeactivateConversation'> = {
+    cancelMatchAndDeactivateConversation,
+  }
+) {
   async function validateProfiles(actorId: string, targetId: string) {
     if (actorId === targetId) {
       throw new AppError(422, 'You cannot interact with your own profile.');
@@ -27,21 +42,14 @@ export function createInteractionService(repository: InteractionRepository) {
     }
   }
 
-  // Save the like first; a reciprocal like then creates the match and its conversation.
+  // Persist the like before publishing; matching runs asynchronously and does not affect this response.
   async function like(actorId: string, targetId: string) {
     await validateProfiles(actorId, targetId);
     await ensureNotBlocked(actorId, targetId);
 
     await repository.saveInteraction(actorId, targetId, InteractionKind.THICH);
-
-    const reciprocalKind = await repository.getInteractionKind(targetId, actorId);
-    if (reciprocalKind !== InteractionKind.THICH) {
-      return { action: 'THICH' as const, matched: false, matchId: null };
-    }
-
-    const matchId = await repository.createOrReactivateMatch(actorId, targetId);
-    await repository.ensureConversation(matchId);
-    return { action: 'THICH' as const, matched: true, matchId };
+    eventBus.publish('interaction.like-created', { actorId, targetId });
+    return { action: 'THICH' as const };
   }
 
   // A skip records the decision without checking for or creating a match.
@@ -58,7 +66,8 @@ export function createInteractionService(repository: InteractionRepository) {
     await validateProfiles(actorId, targetId);
     await repository.createBlock(actorId, targetId);
     await repository.deleteInteractionsBetween(actorId, targetId);
-    await repository.cancelMatchAndDeactivateConversation(actorId, targetId);
+
+    await matching.cancelMatchAndDeactivateConversation(actorId, targetId);
 
     return { action: 'CHAN' as const, matched: false, matchId: null };
   }

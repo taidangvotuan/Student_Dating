@@ -20,6 +20,7 @@ import {
 import profileRouter from './modules/profile/profile.router.js';
 import discoveryRouter from './modules/discovery/discovery.router.js';
 import interactionRouter from './modules/interaction/interaction.router.js';
+import { initializeMatchingModule } from './modules/matching/matching.listener.js';
 
 export const app = express();
 
@@ -176,6 +177,8 @@ export async function startApplication(exitOnError = true): Promise<void> {
     logger.info('Connecting to PostgreSQL database via Prisma...');
     await prisma.$connect();
     logger.info('Connected to database via Prisma successfully.');
+
+    initializeMatchingModule();
 
     app.listen(PORT, () => {
       logger.info(`🚀 Student Dating API server is running on http://localhost:${PORT}`);

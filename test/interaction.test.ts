@@ -1,14 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Request, Response } from 'express';
-import { InteractionKind, type PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { InteractionTargetParamsSchema } from '../src/modules/interaction/interaction.schemas.js';
 import { createInteractionController } from '../src/modules/interaction/interaction.controller.js';
 import { createInteractionService } from '../src/modules/interaction/interaction.service.js';
+import { EventBus } from '../src/shared/events/event-bus.js';
 import {
   createInteractionRepository as createPrismaInteractionRepository,
   type InteractionRepository,
 } from '../src/modules/interaction/interaction.repository.js';
+import type { InteractionEvents } from '../src/shared/events/interaction.events.js';
 import { AppError } from '../src/shared/errors/AppError.js';
 
 const actorId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -23,10 +25,6 @@ function createInteractionRepositoryStub(
     createBlock: async () => {},
     deleteInteractionsBetween: async () => {},
     saveInteraction: async () => {},
-    getInteractionKind: async () => null,
-    createOrReactivateMatch: async () => 'match-id',
-    ensureConversation: async () => {},
-    cancelMatchAndDeactivateConversation: async () => {},
     ...overrides,
   };
 }
@@ -74,50 +72,30 @@ describe('InteractionRepository', () => {
     assert.equal(profileQueries.length, 1);
   });
 
-  it('uses the updated match rows to deactivate conversations without a match lookup', async () => {
-    const matchLookups: unknown[] = [];
-    const conversationUpdates: unknown[] = [];
-    const repository = createPrismaInteractionRepository({
-      match: {
-        updateManyAndReturn: async () => {
-          return [{ id: 'match-id' }];
-        },
-        findUnique: async (query: unknown) => {
-          matchLookups.push(query);
-          return null;
-        },
-      },
-      conversation: {
-        updateMany: async (query: unknown) => {
-          conversationUpdates.push(query);
-          return { count: 1 };
-        },
-      },
-    } as unknown as PrismaClient);
-
-    await repository.cancelMatchAndDeactivateConversation(actorId, targetId);
-
-    assert.equal(matchLookups.length, 0);
-    assert.equal(conversationUpdates.length, 1);
-  });
 });
 
 describe('InteractionController', () => {
   it('maps each endpoint to its interaction action using the target ID from the URL', async () => {
     const calls: Array<{ method: string; actorId: string; targetId: string }> = [];
-    const createAction = (method: string) => async (actorId: string, actionTargetId: string) => {
-      calls.push({ method, actorId, targetId: actionTargetId });
-      return { action: method, matched: false, matchId: null };
-    };
+    const responses: unknown[] = [];
+    const createAction =
+      (method: string, action: string) =>
+      async (actorId: string, actionTargetId: string) => {
+        calls.push({ method, actorId, targetId: actionTargetId });
+        return { action };
+      };
     const controller = createInteractionController({
-      likeInteraction: createAction('like'),
-      skipInteraction: createAction('skip'),
-      blockInteraction: createAction('block'),
+      likeInteraction: createAction('like', 'THICH'),
+      skipInteraction: createAction('skip', 'BO_QUA'),
+      blockInteraction: createAction('block', 'CHAN'),
     });
     const req = { params: { targetId }, user: { id: actorId } } as Request;
     const res = {
       status: () => res,
-      json: () => res,
+      json: (body: unknown) => {
+        responses.push(body);
+        return res;
+      },
     } as Response;
     const next = (error?: unknown) => {
       if (error) {
@@ -134,6 +112,10 @@ describe('InteractionController', () => {
       { method: 'skip', actorId, targetId },
       { method: 'block', actorId, targetId },
     ]);
+    assert.deepEqual(responses[0], {
+      status: 'success',
+      data: { action: 'THICH' },
+    });
   });
 });
 
@@ -156,38 +138,29 @@ describe('InteractionService', () => {
     assert.equal(repositoryWasCalled, false);
   });
 
-  it('returns the mutual-like match result', async () => {
-    const matchId = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33';
+  it('publishes the matching event only after saving the like and returns no match result', async () => {
     const callOrder: string[] = [];
+    const eventBus = new EventBus<InteractionEvents>();
+    const publishedEvents: Array<{ actorId: string; targetId: string }> = [];
+    eventBus.subscribe('interaction.like-created', (event) => {
+      callOrder.push('publish-event');
+      publishedEvents.push(event);
+    });
     const service = createInteractionService(
       createInteractionRepositoryStub({
         saveInteraction: async () => {
-          callOrder.push('save');
+          callOrder.push('save-like');
         },
-        getInteractionKind: async () => {
-          callOrder.push('check-reciprocal-like');
-          return InteractionKind.THICH;
-        },
-        createOrReactivateMatch: async () => {
-          callOrder.push('upsert-match');
-          return matchId;
-        },
-        ensureConversation: async () => {
-          callOrder.push('ensure-conversation');
-        },
-      })
+      }),
+      eventBus
     );
 
     assert.deepEqual(
       await service.like(actorId, targetId),
-      { action: 'THICH', matched: true, matchId }
+      { action: 'THICH' }
     );
-    assert.deepEqual(callOrder, [
-      'save',
-      'check-reciprocal-like',
-      'upsert-match',
-      'ensure-conversation',
-    ]);
+    assert.deepEqual(callOrder, ['save-like', 'publish-event']);
+    assert.deepEqual(publishedEvents, [{ actorId, targetId }]);
   });
 
   it('maps unavailable and blocked outcomes to API errors', async () => {
@@ -220,10 +193,13 @@ describe('InteractionService', () => {
         deleteInteractionsBetween: async () => {
           callOrder.push('delete-interactions');
         },
+      }),
+      undefined,
+      {
         cancelMatchAndDeactivateConversation: async () => {
           callOrder.push('cancel-match-and-deactivate-conversation');
         },
-      })
+      }
     );
 
     assert.deepEqual(await service.block(actorId, targetId), {
