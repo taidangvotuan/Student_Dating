@@ -5,8 +5,30 @@ import {
   UpdatePreferencesSchema,
   UpdateInterestsSchema,
 } from '../src/modules/profile/profile.schemas.js';
-import * as ProfileService from '../src/modules/profile/profile.service.js';
+import {
+  createProfileService,
+} from '../src/modules/profile/profile.service.js';
+import type { ProfileRepository } from '../src/modules/profile/profile.repository.js';
 import { AppError } from '../src/shared/errors/AppError.js';
+
+function createProfileRepository(
+  overrides: Partial<ProfileRepository> = {}
+): ProfileRepository {
+  return {
+    findProfile: async () => null,
+    hasProfile: async () => false,
+    updateProfile: async () => {
+      throw new Error('Unexpected profile update.');
+    },
+    countActiveInterests: async () => 0,
+    replaceInterests: async () => {},
+    upsertPreferences: async () => {
+      throw new Error('Unexpected preference upsert.');
+    },
+    listActiveInterests: async () => [],
+    ...overrides,
+  };
+}
 
 describe('Profile Module', () => {
   describe('UpdateProfileSchema Validation', () => {
@@ -102,10 +124,10 @@ describe('Profile Module', () => {
 
   describe('ProfileService', () => {
     it('should throw 404 AppError when getProfile is called for non-existent student', async () => {
+      const service = createProfileService(createProfileRepository());
+
       await assert.rejects(
-        async () => {
-          await ProfileService.getProfile('00000000-0000-0000-0000-000000000000');
-        },
+        () => service.getProfile('00000000-0000-0000-0000-000000000000'),
         (err: unknown) => {
           assert.ok(err instanceof AppError);
           assert.equal(err.statusCode, 404);
@@ -116,12 +138,13 @@ describe('Profile Module', () => {
     });
 
     it('should throw 404 AppError when updateProfile is called for non-existent student', async () => {
+      const service = createProfileService(createProfileRepository());
+
       await assert.rejects(
-        async () => {
-          await ProfileService.updateProfile('00000000-0000-0000-0000-000000000000', {
+        () =>
+          service.updateProfile('00000000-0000-0000-0000-000000000000', {
             fullName: 'Test User',
-          });
-        },
+          }),
         (err: unknown) => {
           assert.ok(err instanceof AppError);
           assert.equal(err.statusCode, 404);
@@ -131,9 +154,26 @@ describe('Profile Module', () => {
       );
     });
 
-    it('should list active interests from database without error', async () => {
-      const interests = await ProfileService.listInterests();
-      assert.ok(Array.isArray(interests));
+    it('should reject inactive interest IDs before replacing selected interests', async () => {
+      let replaced = false;
+      const service = createProfileService(
+        createProfileRepository({
+          hasProfile: async () => true,
+          countActiveInterests: async () => 0,
+          replaceInterests: async () => {
+            replaced = true;
+          },
+        })
+      );
+
+      await assert.rejects(
+        () =>
+          service.setInterests('00000000-0000-0000-0000-000000000000', {
+            interestIds: ['a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'],
+          }),
+        (err: unknown) => err instanceof AppError && err.statusCode === 422
+      );
+      assert.equal(replaced, false);
     });
   });
 });

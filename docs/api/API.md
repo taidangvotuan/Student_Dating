@@ -312,6 +312,62 @@ Upsert the authenticated user's search preferences.
 
 ---
 
+### `GET /api/discovery/criteria`
+
+Get the authenticated user's discovery search criteria. If no criteria have
+been saved yet, defaults are returned (`minAge: 18`, `maxAge: 100`,
+`maxDistanceKm: null`, `verifiedOnly: true`).
+
+### `PUT /api/discovery/criteria`
+
+Update one or more discovery criteria. Omitted fields remain unchanged; nullable
+filters (`preferredGender`, `preferredFaculty`, and `maxDistanceKm`) can be
+cleared by sending `null`. The effective minimum age cannot exceed the maximum
+age.
+
+**Request Body:**
+```json
+{
+  "minAge": 18,
+  "maxAge": 25,
+  "preferredGender": "Nữ",
+  "preferredFaculty": null,
+  "maxDistanceKm": 10,
+  "verifiedOnly": false
+}
+```
+
+Both endpoints return `{ "status": "success", "data": { ...criteria } }`.
+
+---
+
+### `POST /api/interactions/:targetId/like`
+### `POST /api/interactions/:targetId/skip`
+### `POST /api/interactions/:targetId/block`
+
+Like, skip, or block an active profile. The authenticated user's ID is used as
+the actor; `targetId` in the URL must identify another active profile. These
+endpoints do not require a request body.
+
+Repeating an action is safe; like/skip updates the current interaction. A
+successful like emits an internal event for asynchronous matching; the
+response confirms the like was saved and does not report whether a match was
+created. A block removes interactions in both directions, cancels an existing
+match, and disables its conversation. A blocked pair cannot like or skip each
+other.
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "action": "THICH"
+  }
+}
+```
+
+---
+
 ### `GET /api/profile/interests`
 
 List all globally available, active interest tags.
