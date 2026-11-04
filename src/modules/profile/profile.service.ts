@@ -1,152 +1,88 @@
-import { prisma } from '../../database/prisma.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import type {
   UpdateProfileBody,
   UpdateInterestsBody,
   UpdatePreferencesBody,
 } from './profile.schemas.js';
+import {
+  profileRepository,
+  type ProfileRepository,
+} from './profile.repository.js';
 
-export async function getProfile(studentId: string) {
-  const profile = await prisma.profile.findUnique({
-    where: { studentId },
-    include: {
-      profileInterests: {
-        where: { isVisible: true },
-        include: {
-          interest: {
-            select: { id: true, name: true },
-          },
-        },
-      },
-      searchPreference: true,
-      student: {
-        select: {
-          accountStatus: true,
-          verification: {
-            select: {
-              status: true,
-              universityName: true,
-            },
-          },
-        },
-      },
-    },
-  });
+export function createProfileService(repository: ProfileRepository) {
+  async function getProfile(studentId: string) {
+    const profile = await repository.findProfile(studentId);
 
-  if (!profile) {
-    throw new AppError(404, 'Profile not found.');
+    if (!profile) {
+      throw new AppError(404, 'Profile not found.');
+    }
+
+    return profile;
   }
 
-  return profile;
-}
+  async function updateProfile(studentId: string, body: UpdateProfileBody) {
+    if (!(await repository.hasProfile(studentId))) {
+      throw new AppError(404, 'Profile not found.');
+    }
 
-export async function updateProfile(studentId: string, body: UpdateProfileBody) {
-  const existing = await prisma.profile.findUnique({
-    where: { studentId },
-    select: { studentId: true },
-  });
+    const updateData: Parameters<ProfileRepository['updateProfile']>[1] = {
+      ...(body.fullName !== undefined && { fullName: body.fullName }),
+      ...(body.birthDate !== undefined && { birthDate: new Date(body.birthDate) }),
+      ...(body.gender !== undefined && { gender: body.gender }),
+      ...(body.bio !== undefined && { bio: body.bio }),
+      ...(body.faculty !== undefined && { faculty: body.faculty }),
+      ...(body.cohort !== undefined && { cohort: body.cohort }),
+      ...(body.connectionGoal !== undefined && { connectionGoal: body.connectionGoal }),
+      ...(body.visibility !== undefined && { visibility: body.visibility }),
+    };
 
-  if (!existing) {
-    throw new AppError(404, 'Profile not found.');
+    return repository.updateProfile(studentId, updateData);
   }
 
-  const updateData: Parameters<typeof prisma.profile.update>[0]['data'] = {};
+  async function setInterests(
+    studentId: string,
+    { interestIds }: UpdateInterestsBody
+  ) {
+    if (!(await repository.hasProfile(studentId))) {
+      throw new AppError(404, 'Profile not found.');
+    }
 
-  if (body.fullName !== undefined) updateData.fullName = body.fullName;
-  if (body.birthDate !== undefined) updateData.birthDate = new Date(body.birthDate);
-  if (body.gender !== undefined) updateData.gender = body.gender;
-  if (body.bio !== undefined) updateData.bio = body.bio;
-  if (body.faculty !== undefined) updateData.faculty = body.faculty;
-  if (body.cohort !== undefined) updateData.cohort = body.cohort;
-  if (body.connectionGoal !== undefined) updateData.connectionGoal = body.connectionGoal;
-  if (body.visibility !== undefined) updateData.visibility = body.visibility;
-
-  return prisma.profile.update({
-    where: { studentId },
-    data: updateData,
-    include: {
-      profileInterests: {
-        where: { isVisible: true },
-        include: {
-          interest: { select: { id: true, name: true } },
-        },
-      },
-      searchPreference: true,
-    },
-  });
-}
-
-export async function setInterests(studentId: string, { interestIds }: UpdateInterestsBody) {
-  const profile = await prisma.profile.findUnique({
-    where: { studentId },
-    select: { studentId: true },
-  });
-
-  if (!profile) {
-    throw new AppError(404, 'Profile not found.');
-  }
-
-  // Deduplicate incoming IDs
-  const uniqueIds = Array.from(new Set(interestIds));
-
-  if (uniqueIds.length > 0) {
-    const validCount = await prisma.interest.count({
-      where: {
-        id: { in: uniqueIds },
-        isActive: true,
-      },
-    });
+    const uniqueIds = Array.from(new Set(interestIds));
+    const validCount = await repository.countActiveInterests(uniqueIds);
 
     if (validCount !== uniqueIds.length) {
       throw new AppError(422, 'One or more interest IDs are invalid or inactive.');
     }
+
+    await repository.replaceInterests(studentId, uniqueIds);
+    return getProfile(studentId);
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.profileInterest.deleteMany({
-      where: { studentId },
-    });
-
-    if (uniqueIds.length > 0) {
-      await tx.profileInterest.createMany({
-        data: uniqueIds.map((interestId) => ({
-          studentId,
-          interestId,
-          isVisible: true,
-        })),
-      });
+  async function upsertPreferences(studentId: string, body: UpdatePreferencesBody) {
+    if (!(await repository.hasProfile(studentId))) {
+      throw new AppError(404, 'Profile not found.');
     }
-  });
 
-  return getProfile(studentId);
-}
-
-export async function upsertPreferences(studentId: string, body: UpdatePreferencesBody) {
-  const profile = await prisma.profile.findUnique({
-    where: { studentId },
-    select: { studentId: true },
-  });
-
-  if (!profile) {
-    throw new AppError(404, 'Profile not found.');
+    return repository.upsertPreferences(studentId, body);
   }
 
-  return prisma.searchPreference.upsert({
-    where: { studentId },
-    create: {
-      studentId,
-      ...body,
-    },
-    update: {
-      ...body,
-    },
-  });
+  function listInterests() {
+    return repository.listActiveInterests();
+  }
+
+  return {
+    getProfile,
+    updateProfile,
+    setInterests,
+    upsertPreferences,
+    listInterests,
+  };
 }
 
-export async function listInterests() {
-  return prisma.interest.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-  });
-}
+const profileService = createProfileService(profileRepository);
+
+export const getProfile = profileService.getProfile;
+export const updateProfile = profileService.updateProfile;
+export const setInterests = profileService.setInterests;
+export const upsertPreferences = profileService.upsertPreferences;
+export const listInterests = profileService.listInterests;

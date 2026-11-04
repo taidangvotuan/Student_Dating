@@ -18,6 +18,9 @@ import {
   disconnectPrisma,
 } from './database/prisma.js';
 import profileRouter from './modules/profile/profile.router.js';
+import discoveryRouter from './modules/discovery/discovery.router.js';
+import interactionRouter from './modules/interaction/interaction.router.js';
+import { initializeMatchingModule } from './modules/matching/matching.listener.js';
 
 export const app = express();
 
@@ -36,7 +39,7 @@ app.get('/', (_req: Request, res: Response) => {
     message: 'Welcome to the Student Dating platform API',
   });
 });
-
+console.log('Student Dating API is running. Access the API at http://localhost:3000/');
 // Health check route
 app.get('/health', (_req: Request, res: Response) => {
   let isSupabaseConfigured = false;
@@ -103,6 +106,8 @@ app.get('/api/prisma/status', async (_req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/profile', profileRouter);
+app.use('/api/discovery', discoveryRouter);
+app.use('/api/interactions', interactionRouter);
 
 // 404 Not Found Middleware
 app.use((req: Request, res: Response) => {
@@ -172,6 +177,8 @@ export async function startApplication(exitOnError = true): Promise<void> {
     logger.info('Connecting to PostgreSQL database via Prisma...');
     await prisma.$connect();
     logger.info('Connected to database via Prisma successfully.');
+
+    initializeMatchingModule();
 
     app.listen(PORT, () => {
       logger.info(`🚀 Student Dating API server is running on http://localhost:${PORT}`);
