@@ -11,7 +11,8 @@
 2. [Error Format](#error-format)
 3. [Utility Endpoints](#utility-endpoints)
 4. [Profile Endpoints](#profile-endpoints)
-5. [Enum Reference](#enum-reference)
+5. [User Endpoints](#user-endpoints)
+6. [Enum Reference](#enum-reference)
 
 ---
 
@@ -387,6 +388,52 @@ List all globally available, active interest tags.
 
 ---
 
+## User Endpoints
+
+These endpoints require a valid Supabase access token. Each endpoint lists its required role.
+
+### `PUT /api/users/:userId/role`
+
+Requires the `ADMIN` role. Assign or promote an existing user to `MODERATOR` or `ADMIN`. `userId` must be a UUID.
+
+**Request:**
+```json
+{ "role": "MODERATOR" }
+```
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "userId": "uuid",
+    "role": "MODERATOR",
+    "updatedAt": "2026-11-05T00:00:00.000Z"
+  }
+}
+```
+
+Returns `404` if the user does not exist, `409` if the change would downgrade an existing `ADMIN`, or `422` for an invalid UUID or role. This endpoint does not revoke roles. A changed role is included in the user's JWT the next time Supabase issues an access token after the Custom Access Token Hook runs.
+
+### `PUT /api/users/:userId/verification/approve`
+
+Requires the `MODERATOR` or `ADMIN` role. Approves a pending verification.
+
+No request body is required.
+
+### `PUT /api/users/:userId/verification/reject`
+
+Requires the `MODERATOR` or `ADMIN` role. Rejects a pending verification.
+
+**Request:**
+```json
+{ "rejectionReason": "Document is unclear." }
+```
+
+Rejection reason is required and cannot be blank. Both responses include the new status, reviewer ID, review time, and rejection reason. The reason is also returned to the user in `GET /api/profile`. Returns `404` if no verification exists, `409` if it is not pending, or `422` for an invalid UUID or rejection reason.
+
+---
+
 ## Enum Reference
 
 | Enum | Values |
@@ -398,3 +445,4 @@ List all globally available, active interest tags.
 | `MatchStatus` | `DA_GHEP_DOI`, `DANG_HOAT_DONG`, `DA_HUY` |
 | `ConversationStatus` | `HOAT_DONG`, `KHONG_HOAT_DONG` |
 | `MessageStatus` | `DA_GUI`, `DA_XOA` |
+| `UserRole` | `USER`, `MODERATOR`, `ADMIN` |

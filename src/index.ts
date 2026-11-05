@@ -20,6 +20,7 @@ import {
 import profileRouter from './modules/profile/profile.router.js';
 import discoveryRouter from './modules/discovery/discovery.router.js';
 import interactionRouter from './modules/interaction/interaction.router.js';
+import userRouter from './modules/user/user.router.js';
 import { initializeMatchingModule } from './modules/matching/matching.listener.js';
 
 export const app = express();
@@ -108,6 +109,7 @@ app.get('/api/prisma/status', async (_req: Request, res: Response) => {
 app.use('/api/profile', profileRouter);
 app.use('/api/discovery', discoveryRouter);
 app.use('/api/interactions', interactionRouter);
+app.use('/api/users', userRouter);
 
 // 404 Not Found Middleware
 app.use((req: Request, res: Response) => {

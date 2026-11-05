@@ -7,6 +7,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
 enum AccountStatus {
   HOAT_DONG
   TAM_KHOA
@@ -55,10 +61,22 @@ model Student {
   accountStatus AccountStatus @default(HOAT_DONG) @map("account_status")
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  userRole      UserRoleAssignment?
   profile       Profile?
   verification  Verification?
 
   @@map("students")
+}
+
+/// One trusted role assignment per student.
+model UserRoleAssignment {
+  userId    String   @id @map("user_id") @db.Uuid
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  student   Student  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_roles")
 }
 
 /// Student verification status and documents in public schema.

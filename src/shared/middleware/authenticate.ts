@@ -1,14 +1,27 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { User } from '@supabase/supabase-js';
+import { UserRole } from '@prisma/client';
 import { supabaseAdmin } from '../../supabase/supabase.js';
 import { AppError } from '../errors/AppError.js';
 
 declare global {
   namespace Express {
     interface Request {
-      user?: User;
+      user?: Pick<User, 'id'>;
+      userRole?: UserRole;
     }
   }
+}
+
+export function getUserRoleFromClaims(appMetadata: unknown): UserRole | undefined {
+  if (typeof appMetadata !== 'object' || appMetadata === null || !('user_role' in appMetadata)) {
+    return undefined;
+  }
+
+  const role = appMetadata.user_role;
+  return role === UserRole.USER || role === UserRole.MODERATOR || role === UserRole.ADMIN
+    ? role
+    : undefined;
 }
 
 export async function authenticate(
@@ -27,12 +40,13 @@ export async function authenticate(
   }
 
   try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) {
+    const { data, error } = await supabaseAdmin.auth.getClaims(token);
+    if (error || !data?.claims?.sub) {
       return next(new AppError(401, error?.message || 'Invalid or expired token.'));
     }
 
-    req.user = data.user;
+    req.user = { id: data.claims.sub };
+    req.userRole = getUserRoleFromClaims(data.claims.app_metadata);
     next();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Invalid or expired token.';
