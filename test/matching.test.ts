@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchStatus, type PrismaClient } from '@prisma/client';
+import { captureInfoLogs } from './helpers/capture-logger.js';
+import { logger } from '../src/shared/logger/logger.js';
 import { EventBus } from '../src/shared/events/event-bus.js';
 import type {
   InteractionEvents,
@@ -19,7 +21,7 @@ const event: LikeCreatedEvent = {
 };
 
 describe('MatchingRepository', () => {
-  it('upserts the canonical pair with DA_GHEP_DOI status', async () => {
+  it('upserts a match without writing conversation data or opening a transaction', async () => {
     let upsertArgs: unknown;
     const repository = createMatchingRepository({
       match: {
@@ -30,8 +32,9 @@ describe('MatchingRepository', () => {
       },
     } as unknown as PrismaClient);
 
-    await repository.createOrReactivateMatch(event.actorId, event.targetId);
+    const matchId = await repository.createOrReactivateMatch(event.actorId, event.targetId);
 
+    assert.equal(matchId, 'match-id');
     assert.deepEqual(upsertArgs, {
       where: {
         studentAId_studentBId: {
@@ -48,29 +51,25 @@ describe('MatchingRepository', () => {
     });
   });
 
-  it('cancels the canonical pair and deactivates its conversations without a separate match lookup', async () => {
-    const matchLookups: unknown[] = [];
-    const conversationUpdates: unknown[] = [];
+  it('cancels the canonical pair and returns affected match IDs without conversation writes', async () => {
+    let matchUpdate: unknown;
     const repository = createMatchingRepository({
       match: {
-        updateManyAndReturn: async () => [{ id: 'match-id' }],
-        findUnique: async (query: unknown) => {
-          matchLookups.push(query);
-          return null;
-        },
-      },
-      conversation: {
-        updateMany: async (query: unknown) => {
-          conversationUpdates.push(query);
-          return { count: 1 };
+        updateManyAndReturn: async (args: unknown) => {
+          matchUpdate = args;
+          return [{ id: 'match-id' }];
         },
       },
     } as unknown as PrismaClient);
 
-    await repository.cancelMatchAndDeactivateConversation(event.actorId, event.targetId);
+    const matchIds = await repository.cancelMatch(event.actorId, event.targetId);
 
-    assert.equal(matchLookups.length, 0);
-    assert.equal(conversationUpdates.length, 1);
+    assert.deepEqual(matchIds, ['match-id']);
+    assert.deepEqual(matchUpdate, {
+      where: { studentAId: event.actorId, studentBId: event.targetId },
+      data: { status: MatchStatus.DA_HUY },
+      select: { id: true },
+    });
   });
 });
 
@@ -81,13 +80,78 @@ function createMatchingRepositoryStub(
     areAccountsActive: async () => true,
     hasBlockBetween: async () => false,
     hasReciprocalLike: async () => true,
-    createOrReactivateMatch: async () => {},
-    cancelMatchAndDeactivateConversation: async () => {},
+    createOrReactivateMatch: async () => 'match-id',
+    cancelMatch: async () => ['match-id'],
     ...overrides,
   };
 }
 
 describe('MatchingService', () => {
+  it('identifies the Matching service and match action in structured logs', async () => {
+    const service = createMatchingService(
+      createMatchingRepositoryStub(),
+      {
+        activateConversation: async () => {},
+        deactivateConversations: async () => {},
+      }
+    );
+    const logs = await captureInfoLogs(async () => {
+      await service.handleLikeCreated(event);
+    });
+
+    assert.deepEqual(logs, [{
+      message: '[Matching Service] Handle like created success',
+      metadata: {
+        action: 'matching.match.created_or_reactivated',
+        actorId: event.actorId,
+        targetId: event.targetId,
+        matchId: 'match-id',
+        matched: true,
+      },
+    }]);
+  });
+
+  it('logs match creation through the shared logger, not an injected logger', async () => {
+    const sharedEntries: Array<{ message: string; metadata: Record<string, unknown> }> = [];
+    const injectedEntries: unknown[] = [];
+    const originalInfo = Object.getOwnPropertyDescriptor(logger, 'info');
+    Object.defineProperty(logger, 'info', {
+      configurable: true,
+      value: (message: string, metadata: Record<string, unknown>) => {
+        sharedEntries.push({ message, metadata });
+        return logger;
+      },
+    });
+
+    try {
+      const createService = createMatchingService as (...args: unknown[]) => ReturnType<typeof createMatchingService>;
+      const service = Reflect.apply(createService, undefined, [
+        createMatchingRepositoryStub(),
+        {
+          activateConversation: async () => {},
+          deactivateConversations: async () => {},
+        },
+        { info: (...args: unknown[]) => injectedEntries.push(args) },
+      ]);
+      await service.handleLikeCreated(event);
+    } finally {
+      if (originalInfo) Object.defineProperty(logger, 'info', originalInfo);
+      else Reflect.deleteProperty(logger, 'info');
+    }
+
+    assert.deepEqual(sharedEntries, [{
+      message: '[Matching Service] Handle like created success',
+      metadata: {
+        action: 'matching.match.created_or_reactivated',
+        actorId: event.actorId,
+        targetId: event.targetId,
+        matchId: 'match-id',
+        matched: true,
+      },
+    }]);
+    assert.deepEqual(injectedEntries, []);
+  });
+
   it('creates a match only after active-account, no-block, and reciprocal-like checks pass', async () => {
     const calls: string[] = [];
     const service = createMatchingService(
@@ -106,8 +170,15 @@ describe('MatchingService', () => {
         },
         createOrReactivateMatch: async () => {
           calls.push('create-match');
+          return 'match-id';
         },
-      })
+      }),
+      {
+        activateConversation: async (matchId) => {
+          calls.push(`activate-conversation:${matchId}`);
+        },
+        deactivateConversations: async () => {},
+      }
     );
 
     assert.equal(await service.handleLikeCreated(event), true);
@@ -116,7 +187,30 @@ describe('MatchingService', () => {
       'check-block',
       'check-reciprocal-like',
       'create-match',
+      'activate-conversation:match-id',
     ]);
+  });
+
+  it('cancels a match then asks Chat to deactivate conversations for returned match IDs', async () => {
+    const calls: string[] = [];
+    const service = createMatchingService(
+      createMatchingRepositoryStub({
+        cancelMatch: async () => {
+          calls.push('cancel-match');
+          return ['match-id'];
+        },
+      }),
+      {
+        activateConversation: async () => {},
+        deactivateConversations: async (matchIds) => {
+          calls.push(`deactivate-conversations:${matchIds.join(',')}`);
+        },
+      }
+    );
+
+    await service.cancelMatch(event.actorId, event.targetId);
+
+    assert.deepEqual(calls, ['cancel-match', 'deactivate-conversations:match-id']);
   });
 
   it('does not create a match if either account is inactive', async () => {
@@ -142,13 +236,13 @@ describe('MatchingService', () => {
     const blockedService = createMatchingService(
       createMatchingRepositoryStub({
         hasBlockBetween: async () => true,
-        createOrReactivateMatch: createMatch,
+        createOrReactivateMatch: async () => { await createMatch(); return 'match-id'; },
       })
     );
     const oneSidedLikeService = createMatchingService(
       createMatchingRepositoryStub({
         hasReciprocalLike: async () => false,
-        createOrReactivateMatch: createMatch,
+        createOrReactivateMatch: async () => { await createMatch(); return 'match-id'; },
       })
     );
 

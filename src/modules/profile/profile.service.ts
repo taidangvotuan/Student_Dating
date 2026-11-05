@@ -1,4 +1,5 @@
 import { AppError } from '../../shared/errors/AppError.js';
+import { logger } from '../../shared/logger/logger.js';
 import type {
   UpdateProfileBody,
   UpdateInterestsBody,
@@ -17,6 +18,10 @@ export function createProfileService(repository: ProfileRepository) {
       throw new AppError(404, 'Profile not found.');
     }
 
+    logger.info('[Profile Service] Get profile success', {
+      action: 'profile.retrieved',
+      studentId,
+    });
     return profile;
   }
 
@@ -36,7 +41,13 @@ export function createProfileService(repository: ProfileRepository) {
       ...(body.visibility !== undefined && { visibility: body.visibility }),
     };
 
-    return repository.updateProfile(studentId, updateData);
+    const updatedProfile = await repository.updateProfile(studentId, updateData);
+    logger.info('[Profile Service] Update profile success', {
+      action: 'profile.updated',
+      studentId,
+      updatedFields: Object.keys(updateData),
+    });
+    return updatedProfile;
   }
 
   async function setInterests(
@@ -55,6 +66,11 @@ export function createProfileService(repository: ProfileRepository) {
     }
 
     await repository.replaceInterests(studentId, uniqueIds);
+    logger.info('[Profile Service] Set interests success', {
+      action: 'profile.interests.updated',
+      studentId,
+      interestCount: uniqueIds.length,
+    });
     return getProfile(studentId);
   }
 
@@ -63,11 +79,22 @@ export function createProfileService(repository: ProfileRepository) {
       throw new AppError(404, 'Profile not found.');
     }
 
-    return repository.upsertPreferences(studentId, body);
+    const preferences = await repository.upsertPreferences(studentId, body);
+    logger.info('[Profile Service] Upsert preferences success', {
+      action: 'profile.preferences.updated',
+      studentId,
+      updatedFields: Object.keys(body),
+    });
+    return preferences;
   }
 
-  function listInterests() {
-    return repository.listActiveInterests();
+  async function listInterests() {
+    const interests = await repository.listActiveInterests();
+    logger.info('[Profile Service] List interests success', {
+      action: 'profile.interests.listed',
+      count: interests.length,
+    });
+    return interests;
   }
 
   return {

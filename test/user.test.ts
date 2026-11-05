@@ -13,6 +13,7 @@ import {
 import type {
   UserRepository,
 } from '../src/modules/user/user.repository.js';
+import { captureInfoLogs } from './helpers/capture-logger.js';
 
 function createRepository(overrides: Partial<UserRepository> = {}) {
   const calls: string[] = [];
@@ -49,6 +50,25 @@ function createRepository(overrides: Partial<UserRepository> = {}) {
 }
 
 describe('User service', () => {
+  it('logs role assignment with the User service source and relevant IDs', async () => {
+    const { repository } = createRepository();
+    const service = createUserService(repository);
+
+    const logs = await captureInfoLogs(async () => {
+      await service.assignRole('admin-id', 'target-id', UserRole.MODERATOR);
+    });
+
+    assert.deepEqual(logs, [{
+      message: '[User Service] Assign role success',
+      metadata: {
+        action: 'user.role.assigned',
+        actorId: 'admin-id',
+        userId: 'target-id',
+        role: UserRole.MODERATOR,
+      },
+    }]);
+  });
+
   it('assigns MODERATOR to an existing user', async () => {
     const { repository, calls } = createRepository();
     const service = createUserService(repository);

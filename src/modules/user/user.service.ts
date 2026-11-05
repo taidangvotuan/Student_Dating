@@ -1,5 +1,6 @@
 import { UserRole, VerificationStatus } from '@prisma/client';
 import { AppError } from '../../shared/errors/AppError.js';
+import { logger } from '../../shared/logger/logger.js';
 import {
   userRepository,
   type UserRepository,
@@ -22,7 +23,14 @@ export function createUserService(repository: UserRepository) {
         throw new AppError(409, 'You cannot downgrade your own ADMIN role.');
       }
 
-      return repository.assignRole(userId, role);
+      const assignment = await repository.assignRole(userId, role);
+      logger.info('[User Service] Assign role success', {
+        action: 'user.role.assigned',
+        actorId,
+        userId,
+        role,
+      });
+      return assignment;
     },
 
     async approveVerification(reviewerId: string, userId: string) {
@@ -43,6 +51,12 @@ export function createUserService(repository: UserRepository) {
         throw new AppError(409, 'Only pending verifications can be reviewed.');
       }
 
+      logger.info('[User Service] Approve verification success', {
+        action: 'user.verification.approved',
+        actorId: reviewerId,
+        userId,
+        status: VerificationStatus.DA_XAC_THUC,
+      });
       return result;
     },
 
@@ -69,6 +83,12 @@ export function createUserService(repository: UserRepository) {
         throw new AppError(409, 'Only pending verifications can be reviewed.');
       }
 
+      logger.info('[User Service] Reject verification success', {
+        action: 'user.verification.rejected',
+        actorId: reviewerId,
+        userId,
+        status: VerificationStatus.TU_CHOI,
+      });
       return result;
     },
   };

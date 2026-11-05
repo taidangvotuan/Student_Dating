@@ -12,6 +12,7 @@ import {
 } from '../src/modules/interaction/interaction.repository.js';
 import type { InteractionEvents } from '../src/shared/events/interaction.events.js';
 import { AppError } from '../src/shared/errors/AppError.js';
+import { captureInfoLogs } from './helpers/capture-logger.js';
 
 const actorId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const targetId = 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
@@ -120,6 +121,23 @@ describe('InteractionController', () => {
 });
 
 describe('InteractionService', () => {
+  it('logs likes with the Interaction service source and both participant IDs', async () => {
+    const service = createInteractionService(createInteractionRepositoryStub());
+
+    const logs = await captureInfoLogs(async () => {
+      await service.like(actorId, targetId);
+    });
+
+    assert.deepEqual(logs, [{
+      message: '[Interaction Service] Like created success',
+      metadata: {
+        action: 'interaction.like.created',
+        actorId,
+        targetId,
+      },
+    }]);
+  });
+
   it('rejects interacting with the actor profile', async () => {
     let repositoryWasCalled = false;
     const service = createInteractionService(
@@ -196,8 +214,8 @@ describe('InteractionService', () => {
       }),
       undefined,
       {
-        cancelMatchAndDeactivateConversation: async () => {
-          callOrder.push('cancel-match-and-deactivate-conversation');
+        cancelMatch: async () => {
+          callOrder.push('cancel-match');
         },
       }
     );
@@ -210,7 +228,7 @@ describe('InteractionService', () => {
     assert.deepEqual(callOrder, [
       'create-block',
       'delete-interactions',
-      'cancel-match-and-deactivate-conversation',
+      'cancel-match',
     ]);
   });
 });

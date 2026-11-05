@@ -1,5 +1,6 @@
 import { InteractionKind } from '@prisma/client';
 import { AppError } from '../../shared/errors/AppError.js';
+import { logger } from '../../shared/logger/logger.js';
 import {
   interactionRepository,
   type InteractionRepository,
@@ -10,15 +11,15 @@ import {
   type InteractionEvents,
 } from '../../shared/events/interaction.events.js';
 import {
-  cancelMatchAndDeactivateConversation,
+  cancelMatch,
   type MatchingService,
 } from '../matching/matching.service.js';
 
 export function createInteractionService(
   repository: InteractionRepository,
   eventBus: EventBus<InteractionEvents> = interactionEventBus,
-  matching: Pick<MatchingService, 'cancelMatchAndDeactivateConversation'> = {
-    cancelMatchAndDeactivateConversation,
+  matching: Pick<MatchingService, 'cancelMatch'> = {
+    cancelMatch,
   }
 ) {
   async function validateProfiles(actorId: string, targetId: string) {
@@ -49,6 +50,11 @@ export function createInteractionService(
 
     await repository.saveInteraction(actorId, targetId, InteractionKind.THICH);
     eventBus.publish('interaction.like-created', { actorId, targetId });
+    logger.info('[Interaction Service] Like created success', {
+      action: 'interaction.like.created',
+      actorId,
+      targetId,
+    });
     return { action: 'THICH' as const };
   }
 
@@ -58,6 +64,11 @@ export function createInteractionService(
     await ensureNotBlocked(actorId, targetId);
 
     await repository.saveInteraction(actorId, targetId, InteractionKind.BO_QUA);
+    logger.info('[Interaction Service] Skip created success', {
+      action: 'interaction.skip.created',
+      actorId,
+      targetId,
+    });
     return { action: 'BO_QUA' as const, matched: false, matchId: null };
   }
 
@@ -67,8 +78,13 @@ export function createInteractionService(
     await repository.createBlock(actorId, targetId);
     await repository.deleteInteractionsBetween(actorId, targetId);
 
-    await matching.cancelMatchAndDeactivateConversation(actorId, targetId);
+    await matching.cancelMatch(actorId, targetId);
 
+    logger.info('[Interaction Service] Block created success', {
+      action: 'interaction.block.created',
+      actorId,
+      targetId,
+    });
     return { action: 'CHAN' as const, matched: false, matchId: null };
   }
 

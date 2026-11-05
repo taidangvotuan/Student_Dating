@@ -97,7 +97,7 @@ await prisma.interaction.create({
 });
 ```
 
-**Create a match + conversation atomically:**
+**Create a match, then let Chat create or reactivate its conversation:**
 
 > [!IMPORTANT]
 > `studentAId` must be lexicographically less than `studentBId`. Sort both UUIDs before calling this.
@@ -105,31 +105,23 @@ await prisma.interaction.create({
 ```typescript
 const [a, b] = [studentId1, studentId2].sort();
 
-await prisma.$transaction(async (tx) => {
-  const match = await tx.match.create({
-    data: { studentAId: a, studentBId: b, status: 'DANG_HOAT_DONG' },
-  });
-  await tx.conversation.create({
-    data: { matchId: match.id, status: 'HOAT_DONG' },
-  });
+const match = await prisma.match.upsert({
+  where: { studentAId_studentBId: { studentAId: a, studentBId: b } },
+  create: { studentAId: a, studentBId: b },
+  update: { status: 'DA_GHEP_DOI' },
 });
+await chatService.activateConversation(match.id);
 ```
 
-**Block a user and cancel their active match in one transaction:**
+**Cancel a match, then let Chat deactivate its conversation:**
 ```typescript
-await prisma.$transaction(async (tx) => {
-  await tx.block.create({ data: { blockerId, blockedId } });
-
-  const [a, b] = [blockerId, blockedId].sort();
-  await tx.match.updateMany({
-    where: {
-      studentAId: a,
-      studentBId: b,
-      status: { not: 'DA_HUY' },
-    },
-    data: { status: 'DA_HUY' },
-  });
+const [a, b] = [studentId1, studentId2].sort();
+const matches = await prisma.match.updateManyAndReturn({
+  where: { studentAId: a, studentBId: b },
+  data: { status: 'DA_HUY' },
+  select: { id: true },
 });
+await chatService.deactivateConversations(matches.map(({ id }) => id));
 ```
 
 **Paginate messages in a conversation (newest first):**

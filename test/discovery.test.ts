@@ -12,6 +12,7 @@ import { createDiscoveryService } from '../src/modules/discovery/discovery.servi
 import type { DiscoveryRepository } from '../src/modules/discovery/discovery.repository.js';
 import type { DiscoveryFeedRow } from '../src/modules/discovery/discovery.queries.js';
 import { AppError } from '../src/shared/errors/AppError.js';
+import { captureInfoLogs } from './helpers/capture-logger.js';
 
 function createDiscoveryRepository(
   overrides: Partial<DiscoveryRepository> = {}
@@ -126,6 +127,28 @@ describe('Discovery feed query', () => {
 });
 
 describe('DiscoveryService', () => {
+  it('logs feed retrieval with the Discovery service source and result context', async () => {
+    const service = createDiscoveryService(createDiscoveryRepository({
+      findFeed: async () => [],
+    }));
+
+    const logs = await captureInfoLogs(async () => {
+      await service.getDiscoveryFeed('viewer-id', 20, 10);
+    });
+
+    assert.deepEqual(logs, [{
+      message: '[Discovery Service] Get discovery feed success',
+      metadata: {
+        action: 'discovery.feed.retrieved',
+        studentId: 'viewer-id',
+        limit: 20,
+        offset: 10,
+        returnedCount: 0,
+        hasMore: false,
+      },
+    }]);
+  });
+
   it('returns search criteria for the authenticated profile', async () => {
     const service = createDiscoveryService(
       createDiscoveryRepository({

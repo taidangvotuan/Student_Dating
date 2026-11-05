@@ -10,6 +10,7 @@ import {
 } from '../src/modules/profile/profile.service.js';
 import type { ProfileRepository } from '../src/modules/profile/profile.repository.js';
 import { AppError } from '../src/shared/errors/AppError.js';
+import { captureInfoLogs } from './helpers/capture-logger.js';
 
 function createProfileRepository(
   overrides: Partial<ProfileRepository> = {}
@@ -123,6 +124,29 @@ describe('Profile Module', () => {
   });
 
   describe('ProfileService', () => {
+    it('logs profile updates with changed field names, not profile contents', async () => {
+      const service = createProfileService(
+        createProfileRepository({
+          hasProfile: async () => true,
+          updateProfile: async () => ({ studentId: 'student-id' } as never),
+        })
+      );
+
+      const logs = await captureInfoLogs(async () => {
+        await service.updateProfile('student-id', { fullName: 'Private name' });
+      });
+
+      assert.deepEqual(logs, [{
+        message: '[Profile Service] Update profile success',
+        metadata: {
+          action: 'profile.updated',
+          studentId: 'student-id',
+          updatedFields: ['fullName'],
+        },
+      }]);
+      assert.equal(JSON.stringify(logs).includes('Private name'), false);
+    });
+
     it('should throw 404 AppError when getProfile is called for non-existent student', async () => {
       const service = createProfileService(createProfileRepository());
 
