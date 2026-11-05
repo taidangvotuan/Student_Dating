@@ -1,8 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { User } from '@supabase/supabase-js';
-import type { UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { supabaseAdmin } from '../../supabase/supabase.js';
-import { getUserRoleFromClaims } from '../auth/rbac.js';
 import { AppError } from '../errors/AppError.js';
 
 declare global {
@@ -12,6 +11,17 @@ declare global {
       userRole?: UserRole;
     }
   }
+}
+
+export function getUserRoleFromClaims(appMetadata: unknown): UserRole | undefined {
+  if (typeof appMetadata !== 'object' || appMetadata === null || !('user_role' in appMetadata)) {
+    return undefined;
+  }
+
+  const role = appMetadata.user_role;
+  return role === UserRole.USER || role === UserRole.MODERATOR || role === UserRole.ADMIN
+    ? role
+    : undefined;
 }
 
 export async function authenticate(

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { UserRole } from '@prisma/client';
 import type { Request, Response } from 'express';
-import { getUserRoleFromClaims } from '../src/shared/auth/rbac.js';
+import { getUserRoleFromClaims } from '../src/shared/middleware/authenticate.js';
 import { requireRole } from '../src/shared/middleware/rbac.js';
 import { AppError } from '../src/shared/errors/AppError.js';
 
