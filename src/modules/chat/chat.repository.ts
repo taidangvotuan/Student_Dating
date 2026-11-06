@@ -95,12 +95,19 @@ export interface MessagePage {
 }
 
 export type SendMessageResult =
-  | { readonly kind: 'created'; readonly message: ChatMessage }
+  | { readonly kind: 'created'; readonly message: ChatMessage; readonly recipientId: string }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'inactive' };
 
+export type DeletedChatMessage = Omit<ChatMessage, 'body' | 'status' | 'deletedAt'> & {
+  readonly body: null;
+  readonly status: typeof MessageStatus.DA_XOA;
+  readonly deletedAt: Date;
+};
+
 export type DeleteMessageResult =
-  | { readonly kind: 'deleted' | 'already-deleted'; readonly message: ChatMessage }
+  | { readonly kind: 'deleted'; readonly message: DeletedChatMessage; readonly recipientId: string }
+  | { readonly kind: 'already-deleted'; readonly message: ChatMessage }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'forbidden' };
 
@@ -108,6 +115,10 @@ export interface ReadMarker {
   readonly conversationId: string;
   readonly studentId: string;
   readonly lastReadAt: Date;
+}
+
+export interface ReadMarkerResult extends ReadMarker {
+  readonly recipientId: string;
 }
 
 export interface ChatRepository {
@@ -131,7 +142,7 @@ export interface ChatRepository {
     conversationId: string,
     messageId: string
   ): Promise<DeleteMessageResult>;
-  markRead(studentId: string, conversationId: string): Promise<ReadMarker | null>;
+  markRead(studentId: string, conversationId: string): Promise<ReadMarkerResult | null>;
 }
 
 interface ConversationCursor {
@@ -405,7 +416,17 @@ export function createChatRepository(client: PrismaClient = prisma): ChatReposit
             id: conversationId,
             match: { is: participantWhere(studentId) },
           },
-          select: { id: true, status: true, match: { select: { status: true } } },
+          select: {
+            id: true,
+            status: true,
+            match: {
+              select: {
+                status: true,
+                studentAId: true,
+                studentBId: true,
+              },
+            },
+          },
         });
         if (!conversation) return { kind: 'not-found' };
         if (
@@ -429,7 +450,11 @@ export function createChatRepository(client: PrismaClient = prisma): ChatReposit
           data: { conversationId, senderId: studentId, body, sentAt },
           select: messageSelect,
         });
-        return { kind: 'created', message };
+        const recipientId =
+          conversation.match.studentAId === studentId
+            ? conversation.match.studentBId
+            : conversation.match.studentAId;
+        return { kind: 'created', message, recipientId };
       });
     },
 
@@ -440,7 +465,15 @@ export function createChatRepository(client: PrismaClient = prisma): ChatReposit
             id: conversationId,
             match: { is: participantWhere(studentId) },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            match: {
+              select: {
+                studentAId: true,
+                studentBId: true,
+              },
+            },
+          },
         });
         if (!conversation) return { kind: 'not-found' };
 
@@ -479,6 +512,10 @@ export function createChatRepository(client: PrismaClient = prisma): ChatReposit
         return {
           kind: 'deleted',
           message: { ...message, body: null, status: MessageStatus.DA_XOA, deletedAt },
+          recipientId:
+            conversation.match.studentAId === studentId
+              ? conversation.match.studentBId
+              : conversation.match.studentAId,
         };
       });
     },
@@ -490,7 +527,15 @@ export function createChatRepository(client: PrismaClient = prisma): ChatReposit
             id: conversationId,
             match: { is: participantWhere(studentId) },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            match: {
+              select: {
+                studentAId: true,
+                studentBId: true,
+              },
+            },
+          },
         });
         if (!conversation) return null;
 
@@ -502,7 +547,15 @@ export function createChatRepository(client: PrismaClient = prisma): ChatReposit
           create: { conversationId, studentId, lastReadAt },
           update: { lastReadAt },
         });
-        return { conversationId, studentId, lastReadAt };
+        return {
+          conversationId,
+          studentId,
+          lastReadAt,
+          recipientId:
+            conversation.match.studentAId === studentId
+              ? conversation.match.studentBId
+              : conversation.match.studentAId,
+        };
       });
     },
   };

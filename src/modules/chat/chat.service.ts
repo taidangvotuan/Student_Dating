@@ -4,13 +4,18 @@ import {
   chatRepository,
   type ChatRepository,
 } from './chat.repository.js';
+import type { RealtimePublisher } from '../../shared/realtime/realtime.events.js';
+import { publishRealtimeEvent } from '../../shared/realtime/realtime.publisher.js';
 
 export interface ChatLifecycle {
   activateConversation(matchId: string): Promise<void>;
   deactivateConversations(matchIds: readonly string[]): Promise<void>;
 }
 
-export function createChatService(repository: ChatRepository) {
+export function createChatService(
+  repository: ChatRepository,
+  publisher: RealtimePublisher = { publishToUsers: publishRealtimeEvent }
+) {
   return {
     async activateConversation(matchId: string) {
       await repository.activateConversation(matchId);
@@ -85,6 +90,24 @@ export function createChatService(repository: ChatRepository) {
         conversationId,
         messageId: result.message.id,
       });
+      try {
+        publisher.publishToUsers([result.recipientId], {
+          name: 'chat.message.created',
+          payload: {
+            ...result.message,
+            sentAt: result.message.sentAt.toISOString(),
+            deletedAt: result.message.deletedAt?.toISOString() ?? null,
+          },
+        });
+      } catch (error) {
+        logger.error('[Chat Service] Realtime message delivery failed', {
+          action: 'chat.message.delivery.failed',
+          studentId,
+          conversationId,
+          messageId: result.message.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       return result.message;
     },
 
@@ -95,6 +118,27 @@ export function createChatService(repository: ChatRepository) {
       }
       if (result.kind === 'forbidden') {
         throw new AppError(403, 'You can only delete your own messages.');
+      }
+      if (result.kind === 'deleted') {
+        try {
+          publisher.publishToUsers([result.recipientId], {
+            name: 'chat.message.deleted',
+            payload: {
+              messageId: result.message.id,
+              conversationId,
+              deletedById: studentId,
+              deletedAt: result.message.deletedAt.toISOString(),
+            },
+          });
+        } catch (error) {
+          logger.error('[Chat Service] Realtime message deletion delivery failed', {
+            action: 'chat.message.deletion_delivery.failed',
+            studentId,
+            conversationId,
+            messageId: result.message.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
       logger.info('[Chat Service] Delete message success', {
         action: 'chat.message.deleted',
@@ -110,12 +154,30 @@ export function createChatService(repository: ChatRepository) {
       if (!marker) {
         throw new AppError(404, 'Conversation not found.');
       }
+      try {
+        publisher.publishToUsers([marker.recipientId], {
+          name: 'chat.conversation.read',
+          payload: {
+            conversationId: marker.conversationId,
+            readerId: marker.studentId,
+            lastReadAt: marker.lastReadAt.toISOString(),
+          },
+        });
+      } catch (error) {
+        logger.error('[Chat Service] Realtime read receipt delivery failed', {
+          action: 'chat.conversation.read_delivery.failed',
+          studentId,
+          conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       logger.info('[Chat Service] Mark conversation read success', {
         action: 'chat.conversation.read',
         studentId,
         conversationId,
       });
-      return marker;
+      const { recipientId: _recipientId, ...readMarker } = marker;
+      return readMarker;
     },
   };
 }

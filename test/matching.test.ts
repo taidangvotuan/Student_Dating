@@ -14,11 +14,13 @@ import {
   createMatchingRepository,
   type MatchingRepository,
 } from '../src/modules/matching/matching.repository.js';
+import type { RealtimePublisher } from '../src/shared/realtime/realtime.events.js';
 
 const event: LikeCreatedEvent = {
   actorId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
   targetId: 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
 };
+const realtimePublisher: RealtimePublisher = { publishToUsers: () => {} };
 
 describe('MatchingRepository', () => {
   it('upserts a match without writing conversation data or opening a transaction', async () => {
@@ -93,7 +95,8 @@ describe('MatchingService', () => {
       {
         activateConversation: async () => {},
         deactivateConversations: async () => {},
-      }
+      },
+      realtimePublisher
     );
     const logs = await captureInfoLogs(async () => {
       await service.handleLikeCreated(event);
@@ -111,9 +114,8 @@ describe('MatchingService', () => {
     }]);
   });
 
-  it('logs match creation through the shared logger, not an injected logger', async () => {
+  it('logs match creation through the shared logger', async () => {
     const sharedEntries: Array<{ message: string; metadata: Record<string, unknown> }> = [];
-    const injectedEntries: unknown[] = [];
     const originalInfo = Object.getOwnPropertyDescriptor(logger, 'info');
     Object.defineProperty(logger, 'info', {
       configurable: true,
@@ -124,15 +126,14 @@ describe('MatchingService', () => {
     });
 
     try {
-      const createService = createMatchingService as (...args: unknown[]) => ReturnType<typeof createMatchingService>;
-      const service = Reflect.apply(createService, undefined, [
+      const service = createMatchingService(
         createMatchingRepositoryStub(),
         {
           activateConversation: async () => {},
           deactivateConversations: async () => {},
         },
-        { info: (...args: unknown[]) => injectedEntries.push(args) },
-      ]);
+        realtimePublisher
+      );
       await service.handleLikeCreated(event);
     } finally {
       if (originalInfo) Object.defineProperty(logger, 'info', originalInfo);
@@ -149,7 +150,6 @@ describe('MatchingService', () => {
         matched: true,
       },
     }]);
-    assert.deepEqual(injectedEntries, []);
   });
 
   it('creates a match only after active-account, no-block, and reciprocal-like checks pass', async () => {
@@ -178,6 +178,11 @@ describe('MatchingService', () => {
           calls.push(`activate-conversation:${matchId}`);
         },
         deactivateConversations: async () => {},
+      },
+      {
+        publishToUsers: (userIds, realtimeEvent) => {
+          calls.push(`publish:${userIds.join(',')}:${realtimeEvent.name}`);
+        },
       }
     );
 
@@ -188,6 +193,7 @@ describe('MatchingService', () => {
       'check-reciprocal-like',
       'create-match',
       'activate-conversation:match-id',
+      `publish:${event.actorId},${event.targetId}:matching.match.created`,
     ]);
   });
 
@@ -205,12 +211,21 @@ describe('MatchingService', () => {
         deactivateConversations: async (matchIds) => {
           calls.push(`deactivate-conversations:${matchIds.join(',')}`);
         },
+      },
+      {
+        publishToUsers: (userIds, realtimeEvent) => {
+          calls.push(`publish:${userIds.join(',')}:${realtimeEvent.name}`);
+        },
       }
     );
 
     await service.cancelMatch(event.actorId, event.targetId);
 
-    assert.deepEqual(calls, ['cancel-match', 'deactivate-conversations:match-id']);
+    assert.deepEqual(calls, [
+      'cancel-match',
+      'deactivate-conversations:match-id',
+      `publish:${event.actorId},${event.targetId}:matching.match.cancelled`,
+    ]);
   });
 
   it('does not create a match if either account is inactive', async () => {

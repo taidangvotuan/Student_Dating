@@ -30,13 +30,19 @@ Owns match eligibility and match persistence. The event listener delegates to th
 
 ### `modules/chat`
 
-Owns conversation and message persistence, including creating/reactivating a conversation for a match and deactivating conversations for canceled matches. Structured application logs record user-facing conversation and message actions using actor/resource IDs, never message contents. Each lifecycle change is a single idempotent database operation; Matching no longer writes conversation records or wraps match and conversation writes in one transaction. Multi-step chat operations retain transactions where they protect consistency. Realtime delivery and notifications remain future responsibilities.
+Owns conversation and message persistence, including creating/reactivating a conversation for a match and deactivating conversations for canceled matches. Structured application logs record user-facing conversation and message actions using actor/resource IDs, never message contents. Each lifecycle change is a single idempotent database operation; Matching no longer writes conversation records or wraps match and conversation writes in one transaction. Multi-step chat operations retain transactions where they protect consistency. Chat publishes live message events after successful persistence.
 
 ### `shared/events`
 
 Provides the generic in-process `EventBus<Events>` (`publish`/`subscribe`) and the shared interaction event contract. Interaction publishes `interaction.like-created` after saving a like; Matching subscribes to it. The shared layer transports events only and contains no matching or interaction business logic.
 
 Event delivery is process-local and non-durable: events can be lost on process failure and are not distributed across application instances. The matching listener is initialized once during application startup.
+
+### Realtime delivery
+
+Socket.IO shares the application's HTTP server and uses the Redis adapter for cross-instance fan-out. Redis must be configured and reachable before the application starts. Socket.IO authenticates the Supabase access token from the handshake `auth.accessToken` field and assigns each connection to a server-controlled user room; clients cannot choose rooms.
+
+The REST API remains the only message-write path. After a successful message transaction, Chat emits `chat.message.created` to the other conversation participant. Marking a conversation read emits `chat.conversation.read` with the reader ID and timestamp; successfully deleting a message emits `chat.message.deleted` with the message ID and deletion details. Both are sent only to the other participant. Matching emits `matching.match.created` to both participants after activating a conversation, and `matching.match.cancelled` to both participants after cancellation. These events are transient and best-effort; clients recover missed updates by reloading existing REST resources after reconnecting.
 
 ### Module activity logging
 

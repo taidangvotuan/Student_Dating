@@ -25,10 +25,18 @@ import { captureInfoLogs } from './helpers/capture-logger.js';
 import type {
   ChatRepository,
 } from '../src/modules/chat/chat.repository.js';
+import type { RealtimePublisher } from '../src/shared/realtime/realtime.events.js';
 
 const userId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const conversationId = 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
 const messageId = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33';
+const recipientId = 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44';
+
+function createRealtimePublisherStub(
+  publishToUsers: RealtimePublisher['publishToUsers'] = () => {}
+): RealtimePublisher {
+  return { publishToUsers };
+}
 
 function createRepositoryStub(
   overrides: Partial<ChatRepository> = {}
@@ -51,6 +59,7 @@ function createRepositoryStub(
     listMessages: async () => ({ messages: [], nextCursor: null }),
     sendMessage: async (senderId, id, body) => ({
       kind: 'created',
+      recipientId,
       message: {
         id: messageId,
         conversationId: id,
@@ -69,11 +78,12 @@ function createRepositoryStub(
       status: MessageStatus.DA_XOA,
       sentAt: new Date('2026-01-01T00:00:00.000Z'),
       deletedAt: new Date('2026-01-02T00:00:00.000Z'),
-    } }),
+    }, recipientId }),
     markRead: async (studentId, id) => ({
       conversationId: id,
       studentId,
       lastReadAt: new Date('2026-01-02T00:00:00.000Z'),
+      recipientId,
     }),
     ...overrides,
   };
@@ -97,7 +107,7 @@ describe('Chat request validation', () => {
 
 describe('Chat service', () => {
   it('identifies the Chat service and action in structured activity logs', async () => {
-    const service = createChatService(createRepositoryStub());
+    const service = createChatService(createRepositoryStub(), createRealtimePublisherStub());
     const logs = await captureInfoLogs(async () => {
       await service.sendMessage(userId, conversationId, 'private message text');
     });
@@ -113,9 +123,8 @@ describe('Chat service', () => {
     }]);
   });
 
-  it('logs sent-message metadata through the shared logger, not an injected logger', async () => {
+  it('logs sent-message metadata without exposing the message body', async () => {
     const sharedEntries: Array<{ message: string; metadata: Record<string, unknown> }> = [];
-    const injectedEntries: unknown[] = [];
     const originalInfo = Object.getOwnPropertyDescriptor(logger, 'info');
     Object.defineProperty(logger, 'info', {
       configurable: true,
@@ -126,11 +135,10 @@ describe('Chat service', () => {
     });
 
     try {
-      const createService = createChatService as (...args: unknown[]) => ReturnType<typeof createChatService>;
-      const service = Reflect.apply(createService, undefined, [
+      const service = createChatService(
         createRepositoryStub(),
-        { info: (...args: unknown[]) => injectedEntries.push(args) },
-      ]);
+        createRealtimePublisherStub()
+      );
       await service.sendMessage(userId, conversationId, 'private message text');
     } finally {
       if (originalInfo) Object.defineProperty(logger, 'info', originalInfo);
@@ -146,8 +154,109 @@ describe('Chat service', () => {
         messageId,
       },
     }]);
-    assert.deepEqual(injectedEntries, []);
     assert.equal(JSON.stringify(sharedEntries).includes('private message text'), false);
+  });
+
+  it('publishes a committed message only to the other conversation participant', async () => {
+    let delivery: { userIds: readonly string[]; event: unknown } | undefined;
+    const calls: string[] = [];
+    const service = createChatService(
+      createRepositoryStub({
+        sendMessage: async (senderId, id, body) => {
+          calls.push('persist');
+          return {
+            kind: 'created',
+            recipientId,
+            message: {
+              id: messageId,
+              conversationId: id,
+              senderId,
+              body,
+              status: MessageStatus.DA_GUI,
+              sentAt: new Date('2026-01-01T00:00:00.000Z'),
+              deletedAt: null,
+            },
+          };
+        },
+      }),
+      createRealtimePublisherStub((userIds, event) => {
+        calls.push('publish');
+        delivery = { userIds, event };
+      })
+    );
+
+    await service.sendMessage(userId, conversationId, 'Hello');
+
+    assert.deepEqual(delivery, {
+      userIds: [recipientId],
+      event: {
+        name: 'chat.message.created',
+        payload: {
+          id: messageId,
+          conversationId,
+          senderId: userId,
+          body: 'Hello',
+          status: MessageStatus.DA_GUI,
+          sentAt: '2026-01-01T00:00:00.000Z',
+          deletedAt: null,
+        },
+      },
+    });
+    assert.deepEqual(calls, ['persist', 'publish']);
+  });
+
+  it('publishes a read receipt to the other participant and omits the internal recipient from the response', async () => {
+    let delivery: { userIds: readonly string[]; event: unknown } | undefined;
+    const service = createChatService(
+      createRepositoryStub(),
+      createRealtimePublisherStub((userIds, event) => {
+        delivery = { userIds, event };
+      })
+    );
+
+    const marker = await service.markRead(userId, conversationId);
+
+    assert.deepEqual(marker, {
+      conversationId,
+      studentId: userId,
+      lastReadAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    assert.deepEqual(delivery, {
+      userIds: [recipientId],
+      event: {
+        name: 'chat.conversation.read',
+        payload: {
+          conversationId,
+          readerId: userId,
+          lastReadAt: '2026-01-02T00:00:00.000Z',
+        },
+      },
+    });
+  });
+
+  it('publishes message deletion only after a successful delete', async () => {
+    let delivery: { userIds: readonly string[]; event: unknown } | undefined;
+    const service = createChatService(
+      createRepositoryStub(),
+      createRealtimePublisherStub((userIds, event) => {
+        delivery = { userIds, event };
+      })
+    );
+
+    await service.deleteMessage(userId, conversationId, messageId);
+
+    assert.deepEqual(delivery, {
+      userIds: [recipientId],
+      event: {
+        name: 'chat.message.deleted',
+        payload: {
+          messageId,
+          conversationId,
+          deletedById: userId,
+          deletedAt: '2026-01-02T00:00:00.000Z',
+        },
+      },
+    });
   });
 
   it('passes conversation list pagination through to the repository', async () => {
@@ -411,6 +520,42 @@ describe('Chat service', () => {
       assert.equal(createAttempted, false);
     });
 
+    it('returns the other match participant as the committed message recipient', async () => {
+      const message = {
+        id: messageId,
+        conversationId,
+        senderId: userId,
+        body: 'Hello',
+        status: MessageStatus.DA_GUI,
+        sentAt: new Date('2026-01-01T00:00:00.000Z'),
+        deletedAt: null,
+      };
+      const transaction = {
+        conversation: {
+          findFirst: async () => ({
+            id: conversationId,
+            status: ConversationStatus.HOAT_DONG,
+            match: {
+              status: 'DA_GHEP_DOI',
+              studentAId: userId,
+              studentBId: recipientId,
+            },
+          }),
+          updateMany: async () => ({ count: 1 }),
+        },
+        message: { create: async () => message },
+      };
+      const repository = createChatRepository({
+        $transaction: async (operation: (tx: typeof transaction) => Promise<unknown>) =>
+          operation(transaction),
+      } as unknown as PrismaClient);
+
+      assert.deepEqual(
+        await repository.sendMessage(userId, conversationId, 'Hello'),
+        { kind: 'created', recipientId, message }
+      );
+    });
+
     it('distinguishes a cancelled match from a missing conversation when sending', async () => {
       let messageCreateAttempted = false;
       const transaction = {
@@ -513,11 +658,54 @@ describe('Chat service', () => {
       assert.deepEqual(page, { messages: [tombstone], nextCursor: null });
     });
 
+    it('returns the other conversation participant when deleting a message', async () => {
+      const message = {
+        id: messageId,
+        conversationId,
+        senderId: userId,
+        body: 'Hello',
+        status: MessageStatus.DA_GUI,
+        sentAt: new Date('2026-01-01T00:00:00.000Z'),
+        deletedAt: null,
+      };
+      const transaction = {
+        conversation: {
+          findFirst: async () => ({
+            id: conversationId,
+            match: { studentAId: userId, studentBId: recipientId },
+          }),
+          update: async () => ({}),
+        },
+        message: {
+          findFirst: async () => message,
+          updateMany: async () => ({ count: 1 }),
+        },
+      };
+      const repository = createChatRepository({
+        $transaction: async (operation: (tx: typeof transaction) => Promise<unknown>) =>
+          operation(transaction),
+      } as unknown as PrismaClient);
+
+      const result = await repository.deleteMessage(userId, conversationId, messageId);
+
+      assert.equal(result.kind, 'deleted');
+      if (result.kind !== 'deleted') {
+        assert.fail('Expected the message to be deleted.');
+      }
+      assert.equal(result.recipientId, recipientId);
+      assert.equal(result.message.body, null);
+      assert.equal(result.message.status, MessageStatus.DA_XOA);
+      assert.ok(result.message.deletedAt instanceof Date);
+    });
+
     it('upserts the read marker for the authenticated participant only', async () => {
       let upsertArgs: unknown;
       const transaction = {
         conversation: {
-          findFirst: async () => ({ id: conversationId }),
+          findFirst: async () => ({
+            id: conversationId,
+            match: { studentAId: userId, studentBId: recipientId },
+          }),
         },
         conversationRead: {
           upsert: async (args: unknown) => {
@@ -544,6 +732,7 @@ describe('Chat service', () => {
         update: { lastReadAt: marker?.lastReadAt },
       });
       assert.equal(marker?.studentId, userId);
+      assert.equal(marker?.recipientId, recipientId);
     });
 
     it('returns a snapshot cursor containing activity time and rejects stale pages', async () => {
@@ -648,9 +837,13 @@ describe('Chat service', () => {
       sentAt: new Date('2026-01-01T00:00:00.000Z'),
       deletedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
+    let deliveryCount = 0;
     const service = createChatService(
       createRepositoryStub({
         deleteMessage: async () => ({ kind: 'already-deleted', message: tombstone }),
+      }),
+      createRealtimePublisherStub(() => {
+        deliveryCount += 1;
       })
     );
 
@@ -658,5 +851,6 @@ describe('Chat service', () => {
       await service.deleteMessage(userId, conversationId, messageId),
       tombstone
     );
+    assert.equal(deliveryCount, 0);
   });
 });
