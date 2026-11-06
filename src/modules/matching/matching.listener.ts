@@ -17,7 +17,7 @@ export function registerMatchingListener(
     event,
     error
   ) => {
-    logger.error('Failed to process interaction.like-created event', {
+    logger.error('[Matching Service] Handle like created failed', {
       actorId: event.actorId,
       targetId: event.targetId,
       error: error instanceof Error ? error.message : String(error),

@@ -114,7 +114,7 @@ The original domain classes, now kept in `gg/`, map to tables as follows. The cu
 | `LuotThich`, `ChanNguoiDung` | `interactions`, `blocks` | One interaction per ordered pair; blocking is directional. |
 | `KetNoi`, `CuocTroChuyen`, `TinNhan` | `matches`, `conversations`, `messages`, `conversation_reads` | One conversation per match; read state is per participant. |
 
-`matches.student_a_id < student_b_id` stores each pair in one canonical order. A match is created by the trusted server only after two `THICH` interactions, with no block in either direction and both accounts eligible. Creating a block must cancel any active match/conversation for that pair in the same transaction. Chat sends must be checked by the server for active match, active conversation, sender membership and block state. These cross-table rules are **not** enforced by the DDL alone.
+`matches.student_a_id < student_b_id` stores each pair in one canonical order. A match is created by the trusted server only after two `THICH` interactions, with no block in either direction and both accounts eligible. Creating a block cancels the match; the matching service then asks Chat to deactivate its conversation in a separate write. Chat sends must be checked by the server for active match, active conversation, sender membership and block state. These cross-table rules are **not** enforced by the DDL alone.
 
 ### 3.1. Table and column descriptions
 

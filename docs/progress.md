@@ -61,7 +61,7 @@ _Last updated: 2026-11-02_
 - **Status: ✅ Complete**
 - Provides separate authenticated actions for like, skip, and block, with `targetId` in the URL.
 - Persists likes before publishing `interaction.like-created`; the successful like response reports the action only and does not wait for matching.
-- Blocks clear interactions between the users and delegate match cancellation and conversation deactivation to the Matching module.
+- Blocks clear interactions between the users and delegate match cancellation to Matching; Matching delegates conversation deactivation to Chat.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -77,8 +77,13 @@ _Last updated: 2026-11-02_
 - **Status: ✅ Complete**
 - Handles `interaction.like-created` asynchronously through a listener initialized at application startup.
 - Creates or reactivates a match only when both accounts are active, there is no block in either direction, and a reciprocal like exists.
-- Owns match cancellation and deactivates associated conversations when a block occurs.
-- Conversation creation and match notifications are not implemented; they remain future chat/notification responsibilities.
+- Owns match cancellation; Chat owns associated conversation lifecycle changes.
+- Conversation creation/reactivation and deactivation are idempotent single writes in Chat, separate from match persistence; notifications remain a future responsibility.
+
+### Chat Module (`src/modules/chat/`)
+- **Status: ✅ REST API implemented; realtime pending**
+- Provides participant-scoped conversation listing/details, paginated history, text sends, soft deletion, and read markers.
+- Matching requests Chat to create/reactivate the unique conversation; inactive conversations retain readable history and reject new messages.
 
 ### Shared Event Bus (`src/shared/events/`)
 - **Status: ✅ Complete**

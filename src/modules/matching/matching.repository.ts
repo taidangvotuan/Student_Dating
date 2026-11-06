@@ -1,5 +1,4 @@
 import {
-  ConversationStatus,
   InteractionKind,
   MatchStatus,
   type PrismaClient,
@@ -10,11 +9,8 @@ export interface MatchingRepository {
   areAccountsActive(firstStudentId: string, secondStudentId: string): Promise<boolean>;
   hasBlockBetween(firstStudentId: string, secondStudentId: string): Promise<boolean>;
   hasReciprocalLike(firstStudentId: string, secondStudentId: string): Promise<boolean>;
-  createOrReactivateMatch(firstStudentId: string, secondStudentId: string): Promise<void>;
-  cancelMatchAndDeactivateConversation(
-    firstStudentId: string,
-    secondStudentId: string
-  ): Promise<void>;
+  createOrReactivateMatch(firstStudentId: string, secondStudentId: string): Promise<string>;
+  cancelMatch(firstStudentId: string, secondStudentId: string): Promise<readonly string[]>;
 }
 
 function orderedPair(firstStudentId: string, secondStudentId: string) {
@@ -63,29 +59,22 @@ export function createMatchingRepository(client: PrismaClient = prisma): Matchin
     },
 
     async createOrReactivateMatch(firstStudentId, secondStudentId) {
-      await client.match.upsert({
+      const match = await client.match.upsert({
         where: { studentAId_studentBId: orderedPair(firstStudentId, secondStudentId) },
         create: { ...orderedPair(firstStudentId, secondStudentId) },
         update: { status: MatchStatus.DA_GHEP_DOI },
         select: { id: true },
       });
+      return match.id;
     },
 
-    async cancelMatchAndDeactivateConversation(firstStudentId, secondStudentId) {
+    async cancelMatch(firstStudentId, secondStudentId) {
       const matches = await client.match.updateManyAndReturn({
         where: orderedPair(firstStudentId, secondStudentId),
         data: { status: MatchStatus.DA_HUY },
         select: { id: true },
       });
-
-      if (matches.length === 0) {
-        return;
-      }
-
-      await client.conversation.updateMany({
-        where: { matchId: { in: matches.map((match) => match.id) } },
-        data: { status: ConversationStatus.KHONG_HOAT_DONG },
-      });
+      return matches.map((match) => match.id);
     },
   };
 }
