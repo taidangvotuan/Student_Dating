@@ -32,11 +32,23 @@ Owns match eligibility and match persistence. The event listener delegates to th
 
 Owns conversation and message persistence, including creating/reactivating a conversation for a match and deactivating conversations for canceled matches. Structured application logs record user-facing conversation and message actions using actor/resource IDs, never message contents. Each lifecycle change is a single idempotent database operation; Matching no longer writes conversation records or wraps match and conversation writes in one transaction. Multi-step chat operations retain transactions where they protect consistency. Chat publishes live message events after successful persistence.
 
+### `modules/notification`
+
+Responsible for persistent in-app notifications. Follows a normalized 2-table model separating shared notification events (`notifications`) from per-user delivery state (`notification_recipients`).
+Guarantees three architectural requirements:
+1. **Zero static text in DB**: Titles and messages are dynamically formatted on read based on requested locale (`vi` / `en`) and referenced entity profiles.
+2. **Rich relational IDs**: Carries direct foreign keys and references (`matchId`, `conversationId`, `actorId`) for instant deep-linking.
+3. **Mutual notification support**: A single match event row is shared between both participants while tracking read/dismiss states independently.
+
+Provides endpoints to list notifications with cursor pagination, fetch unread badge counts, mark single or all notifications read, and dismiss individual inbox items.
+
 ### `shared/events`
 
-Provides the generic in-process `EventBus<Events>` (`publish`/`subscribe`) and the shared interaction event contract. Interaction publishes `interaction.like-created` after saving a like; Matching subscribes to it. The shared layer transports events only and contains no matching or interaction business logic.
+Provides the generic in-process `EventBus<Events>` (`publish`/`subscribe`) and shared event contracts:
+- `interaction.events.ts`: `interaction.like-created` published by Interaction; Matching subscribes to it to determine mutual matches.
+- `matching.events.ts`: `matching.match-created` and `matching.match-cancelled` published by Matching; Notification subscribes to it via `notification.listener.ts` to create persistent mutual notifications.
 
-Event delivery is process-local and non-durable: events can be lost on process failure and are not distributed across application instances. The matching listener is initialized once during application startup.
+The shared layer transports events only and contains no business logic. Event delivery is process-local and non-durable: events can be lost on process failure and are not distributed across application instances. Both matching and notification listeners are initialized once during application startup.
 
 ### Realtime delivery
 

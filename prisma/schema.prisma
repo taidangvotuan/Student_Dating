@@ -61,9 +61,11 @@ model Student {
   accountStatus AccountStatus @default(HOAT_DONG) @map("account_status")
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  userRole      UserRoleAssignment?
-  profile       Profile?
-  verification  Verification?
+  userRole               UserRoleAssignment?
+  profile                Profile?
+  verification           Verification?
+  notificationsInitiated Notification[]          @relation("NotificationActor")
+  notificationRecipients NotificationRecipient[]
 
   @@map("students")
 }
@@ -216,9 +218,10 @@ model Match {
   status       MatchStatus   @default(DA_GHEP_DOI)
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  studentA     Profile       @relation("StudentAMatches", fields: [studentAId], references: [studentId], onDelete: Cascade)
-  studentB     Profile       @relation("StudentBMatches", fields: [studentBId], references: [studentId], onDelete: Cascade)
-  conversation Conversation?
+  studentA      Profile        @relation("StudentAMatches", fields: [studentAId], references: [studentId], onDelete: Cascade)
+  studentB      Profile        @relation("StudentBMatches", fields: [studentBId], references: [studentId], onDelete: Cascade)
+  conversation  Conversation?
+  notifications Notification[]
 
   @@unique([studentAId, studentBId])
   @@index([studentBId], map: "matches_student_b_id_idx")
@@ -232,9 +235,10 @@ model Conversation {
   status    ConversationStatus @default(HOAT_DONG)
   createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  match     Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  messages  Message[]
-  reads     ConversationRead[]
+  match         Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  messages      Message[]
+  reads         ConversationRead[]
+  notifications Notification[]
 
   @@map("conversations")
 }
@@ -267,4 +271,57 @@ model ConversationRead {
   @@id([conversationId, studentId])
   @@index([studentId], map: "conversation_reads_student_id_idx")
   @@map("conversation_reads")
+}
+
+enum NotificationType {
+  GHEP_DOI
+  HUY_GHEP_DOI
+  TIN_NHAN_MOI
+  XAC_THUC_DUYET
+  XAC_THUC_TU_CHOI
+}
+
+enum NotificationStatus {
+  CHUA_DOC
+  DA_DOC
+}
+
+/// Persistent notification event entity shared across recipients.
+/// Does NOT store static text. Contains related context IDs.
+model Notification {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type           NotificationType
+  actorId        String?                @map("actor_id") @db.Uuid
+  matchId        String?                @map("match_id") @db.Uuid
+  conversationId String?                @map("conversation_id") @db.Uuid
+  metadata       Json                   @default("{}")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz
+
+  actor          Student?               @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  match          Match?                 @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  conversation   Conversation?          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  recipients     NotificationRecipient[]
+
+  @@index([matchId], map: "notifications_match_id_idx")
+  @@index([conversationId], map: "notifications_conversation_id_idx")
+  @@index([actorId], map: "notifications_actor_id_idx")
+  @@map("notifications")
+}
+
+/// Recipient inbox delivery state per student.
+model NotificationRecipient {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  notificationId String             @map("notification_id") @db.Uuid
+  recipientId    String             @map("recipient_id") @db.Uuid
+  status         NotificationStatus @default(CHUA_DOC)
+  readAt         DateTime?          @map("read_at") @db.Timestamptz
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
+
+  notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  recipient      Student            @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, recipientId], map: "notification_recipients_notif_recipient_uq")
+  @@index([recipientId, createdAt(sort: Desc)], map: "notification_recipients_recipient_created_idx")
+  @@index([recipientId, status], map: "notification_recipients_recipient_status_idx")
+  @@map("notification_recipients")
 }

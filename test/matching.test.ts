@@ -8,6 +8,7 @@ import type {
   InteractionEvents,
   LikeCreatedEvent,
 } from '../src/shared/events/interaction.events.js';
+import type { MatchingEvents } from '../src/shared/events/matching.events.js';
 import { registerMatchingListener } from '../src/modules/matching/matching.listener.js';
 import { createMatchingService } from '../src/modules/matching/matching.service.js';
 import {
@@ -154,6 +155,11 @@ describe('MatchingService', () => {
 
   it('creates a match only after active-account, no-block, and reciprocal-like checks pass', async () => {
     const calls: string[] = [];
+    const publishedEvents: any[] = [];
+    const matchingEventBusInstance = new EventBus<MatchingEvents>();
+    matchingEventBusInstance.subscribe('matching.match-created', (payload) => {
+      publishedEvents.push({ name: 'matching.match-created', payload });
+    });
     const service = createMatchingService(
       createMatchingRepositoryStub({
         areAccountsActive: async () => {
@@ -183,10 +189,19 @@ describe('MatchingService', () => {
         publishToUsers: (userIds, realtimeEvent) => {
           calls.push(`publish:${userIds.join(',')}:${realtimeEvent.name}`);
         },
-      }
+      },
+      matchingEventBusInstance
     );
 
     assert.equal(await service.handleLikeCreated(event), true);
+    assert.deepEqual(publishedEvents, [{
+      name: 'matching.match-created',
+      payload: {
+        matchId: 'match-id',
+        studentAId: event.actorId,
+        studentBId: event.targetId,
+      },
+    }]);
     assert.deepEqual(calls, [
       'check-accounts',
       'check-block',
@@ -199,6 +214,11 @@ describe('MatchingService', () => {
 
   it('cancels a match then asks Chat to deactivate conversations for returned match IDs', async () => {
     const calls: string[] = [];
+    const publishedEvents: any[] = [];
+    const matchingEventBusInstance = new EventBus<MatchingEvents>();
+    matchingEventBusInstance.subscribe('matching.match-cancelled', (payload) => {
+      publishedEvents.push({ name: 'matching.match-cancelled', payload });
+    });
     const service = createMatchingService(
       createMatchingRepositoryStub({
         cancelMatch: async () => {
@@ -216,11 +236,20 @@ describe('MatchingService', () => {
         publishToUsers: (userIds, realtimeEvent) => {
           calls.push(`publish:${userIds.join(',')}:${realtimeEvent.name}`);
         },
-      }
+      },
+      matchingEventBusInstance
     );
 
     await service.cancelMatch(event.actorId, event.targetId);
 
+    assert.deepEqual(publishedEvents, [{
+      name: 'matching.match-cancelled',
+      payload: {
+        matchIds: ['match-id'],
+        firstStudentId: event.actorId,
+        secondStudentId: event.targetId,
+      },
+    }]);
     assert.deepEqual(calls, [
       'cancel-match',
       'deactivate-conversations:match-id',
