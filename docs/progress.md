@@ -1,6 +1,20 @@
 # Project Progress
 
-_Last updated: 2026-11-02_
+_Last updated: 2026-11-09_
+
+---
+
+## Module Implementation Status
+
+| Module | Status | Scope |
+|--------|--------|-------|
+| Profile (`src/modules/profile/`) | ✅ Complete | Own profile, interests, and preferences |
+| Discovery (`src/modules/discovery/`) | ✅ Complete | Eligible profile feed |
+| Interaction (`src/modules/interaction/`) | ✅ Complete | Like, skip, and block actions |
+| Matching (`src/modules/matching/`) | ✅ Complete | Match lifecycle and conversation coordination |
+| Chat (`src/modules/chat/`) | ✅ Complete | Conversations, messages, and realtime events |
+| Notification (`src/modules/notification/`) | ✅ Complete | Notification inbox and event-driven notifications |
+| User (`src/modules/user/`) | ✅ Complete | Role assignment and verification review |
 
 ---
 
@@ -71,6 +85,22 @@ _Last updated: 2026-11-02_
 
 ---
 
+## User & RBAC Module
+
+### Implementation (`src/modules/user/`)
+- **Status: ✅ Complete**
+- Assigns ADMIN/MODERATOR roles behind authenticated ADMIN-only authorization.
+- Allows MODERATORs and ADMINs to approve or reject pending student verifications; review outcomes publish `user.verification-reviewed` for notification handling.
+- Validates user IDs and request bodies with Zod; rejects missing users/verifications and attempts to review non-pending verifications.
+
+| Method | Path | Authorization | Description |
+|--------|------|---------------|-------------|
+| `PUT` | `/api/users/:userId/role` | ADMIN | Assign ADMIN or MODERATOR role |
+| `PUT` | `/api/users/:userId/verification/approve` | MODERATOR, ADMIN | Approve a pending student verification |
+| `PUT` | `/api/users/:userId/verification/reject` | MODERATOR, ADMIN | Reject a pending verification with a reason |
+
+---
+
 ## Matching Module
 
 ### Implementation (`src/modules/matching/`)
@@ -78,18 +108,32 @@ _Last updated: 2026-11-02_
 - Handles `interaction.like-created` asynchronously through a listener initialized at application startup.
 - Creates or reactivates a match only when both accounts are active, there is no block in either direction, and a reciprocal like exists.
 - Owns match cancellation; Chat owns associated conversation lifecycle changes.
-- Conversation creation/reactivation and deactivation are idempotent single writes in Chat, separate from match persistence; notifications remain a future responsibility.
+- Conversation creation/reactivation and deactivation are idempotent single writes in Chat, separate from match persistence; Notification handles match and verification alerts.
 
-### Chat Module (`src/modules/chat/`)
-- **Status: ✅ REST API implemented; realtime pending**
+---
+
+## Chat Module (`src/modules/chat/`)
+- **Status: ✅ Complete**
 - Provides participant-scoped conversation listing/details, paginated history, text sends, soft deletion, and read markers.
 - Matching requests Chat to create/reactivate the unique conversation; inactive conversations retain readable history and reject new messages.
+- Publishes message-created, message-deleted, and conversation-read events to authenticated participants over Socket.IO.
+- Realtime connections verify Supabase access tokens and use the Redis Socket.IO adapter for cross-instance delivery.
 
-### Shared Event Bus (`src/shared/events/`)
+---
+
+## Notification Module (`src/modules/notification/`)
 - **Status: ✅ Complete**
-- Provides a generic in-process `EventBus<Events>` and the shared interaction event contract.
-- Event delivery is not durable and is limited to the current process; there is no retry or cross-instance delivery.
+- Provides an authenticated, paginated notification inbox with unread counts, single/all read updates, deletion, and Vietnamese/English message formatting.
+- Creates notifications for match creation and verification decisions through application event listeners; supports match, verification, and new-message notification types.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/notifications` | List notifications with pagination, status filter, and locale |
+| `GET` | `/api/notifications/unread-count` | Get unread notification count |
+| `PUT` / `PATCH` | `/api/notifications/:id/read` | Mark one notification as read |
+| `PUT` / `PATCH` | `/api/notifications/read-all` | Mark all notifications as read |
+| `DELETE` | `/api/notifications/:id` | Delete a notification |
 
 ### Verification
-- `npm test` — 57 tests passed.
+- `npm test` — 131 tests passed.
 - `npm run build` — passed.
