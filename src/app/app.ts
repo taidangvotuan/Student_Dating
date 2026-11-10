@@ -18,6 +18,7 @@ import discoveryRouter from '../modules/discovery/discovery.router.js';
 import interactionRouter from '../modules/interaction/interaction.router.js';
 import userRouter from '../modules/user/user.router.js';
 import chatRouter from '../modules/chat/chat.router.js';
+import notificationRouter from '../modules/notification/notification.router.js';
 
 
 export const app = express();
@@ -110,6 +111,7 @@ app.use('/api/discovery', discoveryRouter);
 app.use('/api/interactions', interactionRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/users', userRouter);
+app.use('/api/notifications', notificationRouter);
 
 // 404 Not Found Middleware
 app.use((req: Request, res: Response) => {

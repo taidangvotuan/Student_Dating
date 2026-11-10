@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { UserRole, VerificationStatus } from '@prisma/client';
 import { AppError } from '../src/shared/errors/AppError.js';
+import { EventBus } from '../src/shared/events/event-bus.js';
+import type { UserEvents } from '../src/shared/events/user.events.js';
 import {
   createUserService,
 } from '../src/modules/user/user.service.js';
@@ -126,7 +128,11 @@ describe('User service', () => {
 
   it('rejects a pending verification and saves the moderator and reason', async () => {
     const { repository, calls } = createRepository();
-    const service = createUserService(repository);
+    const publishedEvents: any[] = [];
+    const eventBus = new EventBus<UserEvents>();
+    eventBus.subscribe('user.verification-reviewed', (e) => publishedEvents.push(e));
+
+    const service = createUserService(repository, eventBus);
 
     const result = await service.rejectVerification(
       'moderator-id',
@@ -136,6 +142,12 @@ describe('User service', () => {
 
     assert.equal(result.status, VerificationStatus.TU_CHOI);
     assert.equal(result.rejectionReason, 'Document is unclear');
+    assert.deepEqual(publishedEvents, [{
+      userId: 'student-id',
+      reviewerId: 'moderator-id',
+      status: 'TU_CHOI',
+      rejectionReason: 'Document is unclear',
+    }]);
     assert.deepEqual(calls, [
       'verification-status:student-id',
       'review:student-id:moderator-id:TU_CHOI:Document is unclear',
@@ -180,12 +192,21 @@ describe('User service', () => {
 
   it('approves a pending verification and clears any rejection reason', async () => {
     const { repository } = createRepository();
-    const service = createUserService(repository);
+    const publishedEvents: any[] = [];
+    const eventBus = new EventBus<UserEvents>();
+    eventBus.subscribe('user.verification-reviewed', (e) => publishedEvents.push(e));
+
+    const service = createUserService(repository, eventBus);
 
     const result = await service.approveVerification('moderator-id', 'student-id');
 
     assert.equal(result.status, VerificationStatus.DA_XAC_THUC);
     assert.equal(result.rejectionReason, null);
+    assert.deepEqual(publishedEvents, [{
+      userId: 'student-id',
+      reviewerId: 'moderator-id',
+      status: 'DA_XAC_THUC',
+    }]);
   });
 });
 

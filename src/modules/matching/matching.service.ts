@@ -11,6 +11,11 @@ import {
 } from './matching.repository.js';
 import type { RealtimePublisher } from '../../shared/realtime/realtime.events.js';
 import { publishRealtimeEvent } from '../../shared/realtime/realtime.publisher.js';
+import type { EventBus } from '../../shared/events/event-bus.js';
+import {
+  matchingEventBus,
+  type MatchingEvents,
+} from '../../shared/events/matching.events.js';
 
 export interface MatchingService {
   handleLikeCreated(event: LikeCreatedEvent): Promise<boolean>;
@@ -20,7 +25,8 @@ export interface MatchingService {
 export function createMatchingService(
   repository: MatchingRepository,
   chat: ChatLifecycle = { activateConversation, deactivateConversations },
-  publisher: RealtimePublisher = { publishToUsers: publishRealtimeEvent }
+  publisher: RealtimePublisher = { publishToUsers: publishRealtimeEvent },
+  eventBus: EventBus<MatchingEvents> = matchingEventBus
 ) {
   async function handleLikeCreated({ actorId, targetId }: LikeCreatedEvent): Promise<boolean> {
     if (!(await repository.areAccountsActive(actorId, targetId))) {
@@ -73,7 +79,12 @@ export function createMatchingService(
       matched: true,
     });
 
-    // Future notification integration: notify both users that they matched.
+    eventBus.publish('matching.match-created', {
+      matchId,
+      studentAId: actorId,
+      studentBId: targetId,
+    });
+
     return true;
   }
 
@@ -98,6 +109,12 @@ export function createMatchingService(
           error: error instanceof Error ? error.message : String(error),
         });
       }
+
+      eventBus.publish('matching.match-cancelled', {
+        matchIds,
+        firstStudentId,
+        secondStudentId,
+      });
     }
     logger.info('[Matching Service] Cancel match success', {
       action: 'matching.match.cancelled',

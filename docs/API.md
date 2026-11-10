@@ -12,8 +12,9 @@
 3. [Utility Endpoints](#utility-endpoints)
 4. [Profile Endpoints](#profile-endpoints)
 5. [Chat Endpoints](#chat-endpoints)
-6. [User Endpoints](#user-endpoints)
-7. [Enum Reference](#enum-reference)
+6. [Notification Endpoints](#notification-endpoints)
+7. [User Endpoints](#user-endpoints)
+8. [Enum Reference](#enum-reference)
 
 ---
 
@@ -600,6 +601,121 @@ documented above.
 
 ---
 
+## Notification Endpoints
+
+All notification endpoints require authentication via Supabase JWT. Text is dynamically formatted on read using the requested locale (`vi` or `en`), guaranteeing zero static text in database storage.
+
+### `GET /api/notifications`
+
+Retrieve paginated notifications for the authenticated user ordered newest-first.
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | number | No | Number of notifications to return (1-50, default `20`). |
+| `cursor` | UUID | No | Cursor for pagination (ID of last received notification). |
+| `status` | string | No | Filter by read status: `CHUA_DOC` or `DA_DOC`. |
+| `locale` | string | No | Language code for dynamic messages: `vi` (default) or `en`. |
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "receipt-uuid",
+        "notificationId": "notification-uuid",
+        "type": "GHEP_DOI",
+        "status": "CHUA_DOC",
+        "createdAt": "2026-11-07T00:00:00.000Z",
+        "readAt": null,
+        "references": {
+          "matchId": "match-uuid"
+        },
+        "actorProfile": {
+          "fullName": "Nguyen Van B"
+        },
+        "title": "Tương hợp mới!",
+        "body": "Bạn và Nguyen Van B đã tương hợp với nhau. Hãy bắt đầu trò chuyện!"
+      }
+    ],
+    "nextCursor": "receipt-uuid",
+    "unreadCount": 3
+  }
+}
+```
+
+### `GET /api/notifications/unread-count`
+
+Get the total count of unread notifications for badge rendering.
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "unreadCount": 3
+  }
+}
+```
+
+### `PUT /api/notifications/:id/read` or `PATCH /api/notifications/:id/read`
+
+Mark a single notification receipt as read.
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "receipt-uuid",
+    "notificationId": "notification-uuid",
+    "type": "GHEP_DOI",
+    "status": "DA_DOC",
+    "createdAt": "2026-11-07T00:00:00.000Z",
+    "readAt": "2026-11-07T01:00:00.000Z",
+    "references": {
+      "matchId": "match-uuid"
+    },
+    "title": "Tương hợp mới!",
+    "body": "Bạn có một tương hợp mới. Hãy bắt đầu trò chuyện!"
+  }
+}
+```
+
+Returns `404` if the notification does not exist or does not belong to the authenticated user.
+
+### `PUT /api/notifications/read-all` or `PATCH /api/notifications/read-all`
+
+Mark all unread notifications in the caller's inbox as read.
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "data": {
+    "updatedCount": 5
+  }
+}
+```
+
+### `DELETE /api/notifications/:id`
+
+Delete/dismiss a notification from the caller's personal inbox. The shared event row remains preserved for any mutual recipients.
+
+**Response `200`:**
+```json
+{
+  "status": "success",
+  "message": "Notification deleted successfully."
+}
+```
+
+Returns `404` if the notification does not exist or does not belong to the authenticated user.
+
+---
+
 ## User Endpoints
 
 These endpoints require a valid Supabase access token. Each endpoint lists its required role.
@@ -657,4 +773,6 @@ Rejection reason is required and cannot be blank. Both responses include the new
 | `MatchStatus` | `DA_GHEP_DOI`, `DANG_HOAT_DONG`, `DA_HUY` |
 | `ConversationStatus` | `HOAT_DONG`, `KHONG_HOAT_DONG` |
 | `MessageStatus` | `DA_GUI`, `DA_XOA` |
+| `NotificationType` | `GHEP_DOI`, `HUY_GHEP_DOI`, `TIN_NHAN_MOI`, `XAC_THUC_DUYET`, `XAC_THUC_TU_CHOI` |
+| `NotificationStatus` | `CHUA_DOC`, `DA_DOC` |
 | `UserRole` | `USER`, `MODERATOR`, `ADMIN` |

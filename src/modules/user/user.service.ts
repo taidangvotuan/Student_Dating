@@ -5,10 +5,18 @@ import {
   userRepository,
   type UserRepository,
 } from './user.repository.js';
+import type { EventBus } from '../../shared/events/event-bus.js';
+import {
+  userEventBus,
+  type UserEvents,
+} from '../../shared/events/user.events.js';
 
 type AssignableRole = typeof UserRole.MODERATOR | typeof UserRole.ADMIN;
 
-export function createUserService(repository: UserRepository) {
+export function createUserService(
+  repository: UserRepository,
+  eventBus: EventBus<UserEvents> = userEventBus
+) {
   return {
     async assignRole(actorId: string, userId: string, role: AssignableRole) {
       if (!(await repository.studentExists(userId))) {
@@ -57,6 +65,13 @@ export function createUserService(repository: UserRepository) {
         userId,
         status: VerificationStatus.DA_XAC_THUC,
       });
+
+      eventBus.publish('user.verification-reviewed', {
+        userId,
+        reviewerId,
+        status: 'DA_XAC_THUC',
+      });
+
       return result;
     },
 
@@ -89,6 +104,14 @@ export function createUserService(repository: UserRepository) {
         userId,
         status: VerificationStatus.TU_CHOI,
       });
+
+      eventBus.publish('user.verification-reviewed', {
+        userId,
+        reviewerId,
+        status: 'TU_CHOI',
+        rejectionReason,
+      });
+
       return result;
     },
   };

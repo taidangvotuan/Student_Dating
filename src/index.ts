@@ -7,6 +7,7 @@ import { createRealtimeRuntime, RealtimeRuntime } from './shared/realtime/realti
 import { prisma } from './database/prisma.js';
 import { configureRealtimePublisher } from './shared/realtime/realtime.publisher.js';
 import { initializeMatchingModule } from './modules/matching/matching.listener.js';
+import { initializeNotificationModule } from './modules/notification/notification.listener.js';
 
 const isTestEnvironment =
   process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT);
@@ -40,6 +41,7 @@ export async function startApplication(exitOnError = true): Promise<void> {
     logger.info('Connected to Redis for realtime delivery.');
 
     initializeMatchingModule();
+    initializeNotificationModule();
 
     await new Promise<void>((resolve, reject) => {
       const onListening = () => {
