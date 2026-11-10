@@ -24,7 +24,7 @@ type NotificationListenerService = Pick<
 type ErrorReporter = (eventName: string, payload: unknown, error: unknown) => void;
 
 const defaultReportError: ErrorReporter = (eventName, payload, error) => {
-  logger.error(`[Notification Service] Handle ${eventName} event failed`, {
+  logger.error(`[Notification Listener] Handle ${eventName} event failed`, {
     eventName,
     payload,
     error: error instanceof Error ? error.message : String(error),
@@ -63,6 +63,10 @@ export function registerNotificationListener(
   const unsubscribeCreated = matchingBus.subscribe(
     'matching.match-created',
     (event: MatchCreatedEvent) => {
+      logger.info('[Notification Listener] Handle matching.match-created event', {
+        action: 'matching.match-created',
+        matchId: event.matchId
+      });
       void service
         .notifyMatchCreated(event.matchId, event.studentAId, event.studentBId)
         .catch((error: unknown) => {
@@ -74,6 +78,12 @@ export function registerNotificationListener(
   const unsubscribeVerification = userBus.subscribe(
     'user.verification-reviewed',
     (event: VerificationReviewedEvent) => {
+      logger.info('[Notification Listener] Handle user.verification-reviewed event', {
+        action: 'user.verification-reviewed',
+        userId: event.userId,
+        status: event.status,
+        rejectionReason: event.rejectionReason
+      });
       void service
         .notifyVerificationReviewed(
           event.userId,

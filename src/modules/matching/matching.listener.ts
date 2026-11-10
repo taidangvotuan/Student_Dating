@@ -17,7 +17,7 @@ export function registerMatchingListener(
     event,
     error
   ) => {
-    logger.error('[Matching Service] Handle like created failed', {
+    logger.error('[Matching Listener] Handle like created failed', {
       actorId: event.actorId,
       targetId: event.targetId,
       error: error instanceof Error ? error.message : String(error),
