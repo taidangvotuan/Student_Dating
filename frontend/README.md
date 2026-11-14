@@ -25,7 +25,7 @@ Open **http://127.0.0.1:5173** and select **Trải nghiệm demo** to enter the 
 On Windows PowerShell, use `npm.cmd` if your execution policy blocks `npm.ps1`:
 
 ```powershell
-cd "C:\Users\XUAN VI\Student_Dating\frontend"
+cd frontend
 npm.cmd ci
 npm.cmd run dev
 ```
@@ -88,7 +88,7 @@ $env:PLAYWRIGHT_CHANNEL = 'msedge'
 npm.cmd run test:e2e
 ```
 
-The suite covers the complete demo journey, persistence, registration validation, block cancellation and focus restoration, filters, empty states, and notification links. Axe checks the main screens for automated accessibility issues. Reports are generated in `playwright-report/`; screenshots and failure traces are in `test-results/`. These generated directories are ignored by Git. See [VALIDATION.md](VALIDATION.md) for the original MVP validation record and known limitations.
+The suite covers the complete demo journey, persistence, registration validation, block cancellation and focus restoration, filters, empty states, and notification links. Axe checks the main screens for automated accessibility issues. Reports are generated in `playwright-report/`; screenshots and failure traces are in `test-results/`. These generated directories are ignored by Git.
 
 ## Source structure
 
