@@ -4,6 +4,8 @@ import Shell from '../components/layout/Shell';
 import AuthPage from '../pages/auth/AuthPage';
 import ProfilePage from '../pages/profile/ProfilePage';
 import DiscoveryPage from '../pages/discovery/DiscoveryPage';
+import ChatPage from '../pages/chat/ChatPage';
+import NotificationsPage from '../pages/notifications/NotificationsPage';
 
 function AppRoutes() {
   const { state } = useDemo();
@@ -13,8 +15,8 @@ function AppRoutes() {
     <Route element={state.session ? <Shell /> : <Navigate to="/login" replace />}>
       <Route path="/profile" element={<ProfilePage />} />
       <Route path="/discover" element={<DiscoveryPage />} />
-      <Route path="/chat" element={<h1>Trò chuyện</h1>} />
-      <Route path="/notifications" element={<h1>Thông báo</h1>} />
+      <Route path="/chat/:conversationId?" element={<ChatPage />} />
+      <Route path="/notifications" element={<NotificationsPage />} />
     </Route>
     <Route path="*" element={<Navigate to={state.session ? '/discover' : '/login'} replace />} />
   </Routes>;
