@@ -2242,3 +2242,156 @@ progress::-webkit-progress-value {
     transition: none !important;
   }
 }
+
+/* Larger desktop type; retain the existing mobile typography. */
+@media (min-width: 801px) {
+  body,
+  h3,
+  .button,
+  .nav-item,
+  .sidebar-note h3,
+  .story-copy > p,
+  .thread-header h2,
+  .notification-copy strong {
+    font-size: 16px;
+  }
+  h1 {
+    font-size: 36px;
+  }
+  h2 {
+    font-size: 21px;
+  }
+  .eyebrow,
+  .badge,
+  .safe-caption,
+  .user-mini small,
+  .demo-pill,
+  .floating-note,
+  .story-bottom,
+  .or-divider,
+  .auth-footer,
+  .avatar-editor p,
+  .completion-step,
+  .preview-card p,
+  .preview-goal,
+  .discovery-toolbar > span:last-child,
+  .photo-info > span:last-child,
+  .candidate-section .tag,
+  .connection-goal,
+  .discovery-actions > div,
+  .daily-note > p,
+  .new-connections > p,
+  .text-link,
+  .connection-avatars a,
+  .safety-note strong,
+  .conversation-preview p,
+  .notification-copy > .notification-cta,
+  .notification-footer {
+    font-size: 13px;
+  }
+  .brand {
+    font-size: 24px;
+  }
+  .field label,
+  legend,
+  input::placeholder,
+  textarea::placeholder,
+  .error,
+  .checkbox-row,
+  .page-heading p,
+  .auth-form-wrap > p,
+  .auth-tabs a,
+  .avatar-editor h3,
+  .discovery-toolbar > span:first-child,
+  .candidate-faculty strong,
+  .candidate-section p,
+  .aside-title h2,
+  .filter-description,
+  .match-modal > p,
+  .message-bubble,
+  .message-composer textarea,
+  .chat-placeholder p,
+  .notification-tabs > button {
+    font-size: 15px;
+  }
+  .field small,
+  .tag,
+  .sidebar-note p,
+  .sidebar-note a,
+  .sidebar-bottom > .button,
+  .user-mini strong,
+  .desktop-breadcrumb,
+  .section-chip,
+  .story-trust,
+  .number-step,
+  .interest-fieldset p,
+  .profile-save > span,
+  .completion-panel p,
+  .candidate-info > .button,
+  .chat-search input,
+  .conversation-title strong,
+  .chat-no-results,
+  .conversation-intro strong,
+  .notification-copy > span {
+    font-size: 14px;
+  }
+  .workspace-label,
+  .page-heading .eyebrow,
+  .page-footer,
+  .photo-caption,
+  .photo-small,
+  .candidate-top > .muted,
+  .verified,
+  .candidate-faculty span,
+  .candidate-section .eyebrow,
+  .candidate-footnote,
+  .discovery-caption,
+  .daily-note .eyebrow,
+  .daily-note-end,
+  .aside-title > span,
+  .safety-note p,
+  .fiction-note,
+  .filter-count,
+  .match-modal > .eyebrow,
+  .conversation-list-top h2 > span,
+  .conversation-title time,
+  .thread-header p,
+  .thread-demo,
+  .conversation-intro p,
+  .message-day,
+  .message-content time,
+  .chat-safety,
+  .notification-tabs span,
+  .notification-copy > small {
+    font-size: 12px;
+  }
+  .auth-form-wrap h2 {
+    font-size: 30px;
+  }
+  .auth-disclaimer {
+    font-size: 13px !important;
+  }
+  .section-title h2,
+  .preview-card h2 {
+    font-size: 18px;
+  }
+  .completion-number span,
+  .match-modal h3 {
+    font-size: 22px;
+  }
+  .photo-info h2 {
+    font-size: 28px;
+  }
+  .daily-note h2 {
+    font-size: 26px;
+  }
+  .conversation-list-top h2 {
+    font-size: 17px;
+  }
+  .chat-placeholder h2 {
+    font-size: 20px;
+  }
+  .sidebar {
+    overflow-y: auto;
+  }
+}
