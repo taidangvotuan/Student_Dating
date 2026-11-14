@@ -21,3 +21,9 @@ asynchronous server responsibility rather than relying on the demo like result.
 
 Verification targets: build, TypeScript, ESLint, domain tests, Chromium browser
 acceptance at 390 × 844 and 1440 × 1000, accessibility and empty/error states.
+
+Actual results and known limits are recorded in [VALIDATION.md](VALIDATION.md).
+The final browser runner uses the installed Microsoft Edge channel on Windows
+because downloaded Chromium binaries fail to spawn in this host environment.
+The optional code-review-graph tools described in the parent AGENTS.md were not
+available in this session; repository files were inspected directly as fallback.
