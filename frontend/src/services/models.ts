@@ -16,7 +16,7 @@ export type Preferences = z.infer<typeof preferencesSchema>;
 export interface Candidate extends Profile { verified: boolean; distanceKm: number; likedMe: boolean; }
 
 const messageSchema = z.object({ id: z.string(), senderId: z.string(), body: z.string().max(2000), sentAt: z.string() });
-const conversationSchema = z.object({ id: z.string(), matchId: z.string(), participantId: z.string(), unreadCount: z.number().min(0), messages: z.array(messageSchema) });
+const conversationSchema = z.object({ id: z.string(), matchId: z.string(), participantId: z.string(), active: z.boolean().default(true), unreadCount: z.number().min(0), messages: z.array(messageSchema) });
 const notificationSchema = z.object({ id: z.string(), actorId: z.string(), conversationId: z.string(), matchId: z.string(), readAt: z.string().nullable(), createdAt: z.string() });
 export const stateSchema = z.object({
   version: z.literal(1), session: z.boolean(), profile: profileSchema,
