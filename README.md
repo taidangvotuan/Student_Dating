@@ -1,5 +1,19 @@
 # Student Dating
 
+## React MVP (local demo)
+
+The runnable frontend is in `frontend/`; no backend services or environment variables are needed for demo mode.
+
+```powershell
+cd frontend
+npm.cmd ci
+npm.cmd run dev
+```
+
+Open **http://127.0.0.1:5173** and select **Trải nghiệm demo**. Use `npm` instead of `npm.cmd` on macOS/Linux. See the [frontend guide](frontend/README.md) for the complete demo flow, feature branches, checks and backend integration boundaries. The integrated handoff branch is `mvp/student-dating`.
+
+## Backend
+
 Student Dating is a backend application for a student-focused dating platform.
 
 ## Tools and SDKs
@@ -18,6 +32,7 @@ Prerequisites: Node.js 22+, npm, and configured Supabase, PostgreSQL, and Redis 
 1. Install dependencies and create your local environment file:
 
    ```sh
+   cd backend
    npm install
    ```
 
